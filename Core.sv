@@ -47,7 +47,7 @@ module Core (
 					fetch_skip <= fetch_skip - 8;
 				end else begin
 					decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
-					//$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
+					$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
 					fetch_offset <= fetch_offset + 8;
 				end
 			end else begin
