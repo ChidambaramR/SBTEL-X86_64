@@ -7,7 +7,22 @@ module Core (
 	logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
 	logic[5:0] fetch_skip;
 	logic[6:0] fetch_offset, decode_offset;
-        string d[5-1:0] = { "a", "b", "c", "d", "e", "f", "g", "h" };
+
+//Sohil Code
+        logic [255:0][7:0][7:0] opcode_chr;
+        logic [7:0][7:0]str = {"       "};
+        logic [8:0] i = 0;
+        initial 
+        begin
+            for( i = 0; i < 256; i++)
+            begin
+                opcode_chr[i] = str;
+            end 
+            opcode_chr[49] = "XOR     ";
+            opcode_chr[137] = "MOV     ";
+            opcode_chr[131] = "AND     ";
+            opcode_chr[199] = "XOR     ";
+        end 
 
 	function logic mtrr_is_mmio(logic[63:0] physaddr);
 		mtrr_is_mmio = ((physaddr > 640*1024 && physaddr < 1024*1024));
@@ -48,7 +63,7 @@ module Core (
 					fetch_skip <= fetch_skip - 8;
 				end else begin
 					decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
-					$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
+//					$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
 					fetch_offset <= fetch_offset + 8;
 				end
 			end else begin
@@ -76,12 +91,14 @@ module Core (
         logic[0 : 7] opcode;
         logic[0 : 3] reg_byte, rm_byte;
         logic[0 : 1] mod;
+        logic[0 : 7] length;
  
 	always_comb begin
 		if (can_decode) begin : decode_block
 			// cse502 : Decoder here
 			// remove the following line. It is only here to allow successful compilation in the absence of your code.
-			if (decode_bytes == 0) ;
+			length = 0;
+                        if (decode_bytes == 0) ;
                         small_buff = decode_bytes[0 : 7];
                             $display("small buff = %x",small_buff);
                         if (small_buff[0:3] == 4) begin
@@ -98,11 +115,18 @@ module Core (
                             reg_byte = { {R}, {decode_bytes[18 : 20]} };
                             rm_byte = { {B}, {decode_bytes[21 : 23]} };
                             if(reg_byte == 5)
-                              $display("reg byte rbp.W = %x, R = %x, Ex = %x, B = %x, mod = %x,d = %s",W,R,Ex,B,mod,d[1]);
+                              $display("reg byte rbp.W = %x, R = %x, Ex = %x, B = %x, mod = %x",W,R,Ex,B,mod);
                             if(rm_byte == 5)
                               $display("rm byte rbp"); 
                         end
                             $display("Yes IT is REX prefix");
+
+                        $display("OPCODE %x: %s", opcode, opcode_chr[opcode]);
+/*SOHIL CODE
+                        $display("OPCODE %d: %s", 137, opcode_chr[137]);
+                        $display("OPCODE %d: %s", 131, opcode_chr[131]);
+                        $display("OPCODE %d: %s", 199, opcode_chr[199]);
+*/
 			bytes_decoded_this_cycle =+ 15;
 
 			// cse502 : following is an example of how to finish the simulation
