@@ -7,6 +7,7 @@ module Core (
 	logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
 	logic[5:0] fetch_skip;
 	logic[6:0] fetch_offset, decode_offset;
+        string d[5-1:0] = { "a", "b", "c", "d", "e", "f", "g", "h" };
 
 	function logic mtrr_is_mmio(logic[63:0] physaddr);
 		mtrr_is_mmio = ((physaddr > 640*1024 && physaddr < 1024*1024));
@@ -63,6 +64,7 @@ module Core (
 
 	wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
 	wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
+        wire[0:8-1] small_buff;
 	wire can_decode = (fetch_offset - decode_offset >= 15);
 
 	function logic opcode_inside(logic[7:0] value, low, high);
@@ -70,11 +72,38 @@ module Core (
 	endfunction
 
 	logic[3:0] bytes_decoded_this_cycle;
+        logic W, R, Ex, B;
+        logic[0 : 7] opcode;
+        logic[0 : 3] reg_byte, rm_byte;
+        logic[0 : 1] mod;
+ 
 	always_comb begin
 		if (can_decode) begin : decode_block
 			// cse502 : Decoder here
 			// remove the following line. It is only here to allow successful compilation in the absence of your code.
 			if (decode_bytes == 0) ;
+                        small_buff = decode_bytes[0 : 7];
+                            $display("small buff = %x",small_buff);
+                        if (small_buff[0:3] == 4) begin
+                            W = small_buff[4];
+                            R = small_buff[5];
+                            Ex = small_buff[6];
+                            B = small_buff[7];
+			    bytes_decoded_this_cycle =+ 1;
+                            opcode = decode_bytes[8 : 15];
+                            if (opcode == 31)
+                              $display("XOR");
+			    bytes_decoded_this_cycle =+ 1;
+                            mod = decode_bytes[16 : 17];
+                            reg_byte = { {R}, {decode_bytes[18 : 20]} };
+                            rm_byte = { {B}, {decode_bytes[21 : 23]} };
+                            if(reg_byte == 5)
+                              $display("reg byte rbp.W = %x, R = %x, Ex = %x, B = %x, mod = %x,d = %s",W,R,Ex,B,mod,d[1]);
+                            if(rm_byte == 5)
+                              $display("rm byte rbp"); 
+                        end
+                            $display("Yes IT is REX prefix");
+			bytes_decoded_this_cycle =+ 15;
 
 			// cse502 : following is an example of how to finish the simulation
 			if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
