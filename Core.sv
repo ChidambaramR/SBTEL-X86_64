@@ -41,19 +41,19 @@ Sample way to assign values
 rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
 
 //Sohil Code
-        logic [255:0][7:0][7:0] opcode_chr;
+        logic [255:0][7:0][7:0] opcode_char;
         logic [7:0][7:0]str = {"       "};
         logic [8:0] i = 0;
         initial 
         begin
             for( i = 0; i < 256; i++)
             begin
-                opcode_chr[i] = str;
+                opcode_char[i] = str;
             end 
-            opcode_chr[49] = "XOR     ";
-            opcode_chr[137] = "MOV     ";
-            opcode_chr[131] = "AND     ";
-            opcode_chr[199] = "XOR     ";
+            opcode_char[49] = "XOR     ";
+            opcode_char[137] = "MOV     ";
+            opcode_char[131] = "AND     ";
+            opcode_char[199] = "XOR     ";
         end 
 
 	function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -124,12 +124,19 @@ rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
         logic[0 : 3] reg_byte, rm_byte;
         logic[0 : 1] mod;
         logic[0 : 7] length;
- 
+        logic[0 : 24-1] ins;
+        instruction instrn;
 	always_comb begin
 		if (can_decode) begin : decode_block
 			// cse502 : Decoder here
 			// remove the following line. It is only here to allow successful compilation in the absence of your code.
 			length = 0;
+                        ins = decode_bytes[0 : 3*8-1];
+                        $display("ins %x",ins);
+                        instrn = ins[0:23];
+                        $display("Rex prefix = %x",instrn.rex_prefix);
+                        $display("Opcode = %s",opcode_char[instrn.opcode]);
+			bytes_decoded_this_cycle =+ 3;
 /*                        if (decode_bytes == 0) ;
                         small_buff = decode_bytes[0 : 7];
                             $display("small buff = %x",small_buff);
@@ -153,11 +160,11 @@ rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
                         end
                             $display("Yes IT is REX prefix");
 
-                        $display("OPCODE %x: %s", opcode, opcode_chr[opcode]);
+                        $display("OPCODE %x: %s", opcode, opcode_char[opcode]);
 /*SOHIL CODE
-                        $display("OPCODE %d: %s", 137, opcode_chr[137]);
-                        $display("OPCODE %d: %s", 131, opcode_chr[131]);
-                        $display("OPCODE %d: %s", 199, opcode_chr[199]);
+                        $display("OPCODE %d: %s", 137, opcode_char[137]);
+                        $display("OPCODE %d: %s", 131, opcode_char[131]);
+                        $display("OPCODE %d: %s", 199, opcode_char[199]);
 */
 /*
 			bytes_decoded_this_cycle =+ 15;
