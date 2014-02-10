@@ -8,6 +8,38 @@ module Core (
 	logic[5:0] fetch_skip;
 	logic[6:0] fetch_offset, decode_offset;
 
+// Imp Data structures
+/*
+This is the REX prefix
+*/
+typedef struct packed {
+    logic [3:0] def;
+    logic W, R, Xe, B;
+} rex;
+
+/*
+This is the mod_rm byte
+*/
+typedef struct packed {
+    logic [7:6] mod;
+    logic [5:3] reg1;
+    logic [2:0] rm; 
+} mod_rm;
+
+/*
+This is the main instruction structure
+*/
+typedef struct packed {
+    rex rex_prefix;
+    logic [7:0]opcode;
+    mod_rm mod_rm_byte;
+} instruction;
+
+/*
+Sample way to assign values
+*/
+rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
+
 //Sohil Code
         logic [255:0][7:0][7:0] opcode_chr;
         logic [7:0][7:0]str = {"       "};
@@ -98,7 +130,7 @@ module Core (
 			// cse502 : Decoder here
 			// remove the following line. It is only here to allow successful compilation in the absence of your code.
 			length = 0;
-                        if (decode_bytes == 0) ;
+/*                        if (decode_bytes == 0) ;
                         small_buff = decode_bytes[0 : 7];
                             $display("small buff = %x",small_buff);
                         if (small_buff[0:3] == 4) begin
@@ -127,8 +159,9 @@ module Core (
                         $display("OPCODE %d: %s", 131, opcode_chr[131]);
                         $display("OPCODE %d: %s", 199, opcode_chr[199]);
 */
+/*
 			bytes_decoded_this_cycle =+ 15;
-
+*/
 			// cse502 : following is an example of how to finish the simulation
 			if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 		end else begin
