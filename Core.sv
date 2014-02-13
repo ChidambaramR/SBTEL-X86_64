@@ -189,23 +189,20 @@ Sample way to assign values
         logic[0 : 7] offset;
         logic[0 : 1*8-1] temp_prefix;
         logic[0 : 15] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
-
+        logic[0 : 4*8-1] disp_byte;
+        logic[0 : 4*8-1] imm_byte;
         rex rex_prefix;
         op_override op_ride;
         mod_rm modRM_byte;
 	always_comb begin
 		if (can_decode) begin : decode_block
 
-		        // Variable keeping track of the length of the instruction
+		        // Variables which are to be reset for each new decoding
   	                length = 0;
                         offset = 0;
                         mod_rm_enc_byte = 0;
-       /*                 ins = decode_bytes[0 : length*8-1];
-                        $display("ins %x",ins);
-                        instrn = ins[0:23]; 
-       */
-       //                 $display("Rex prefix = %x",instrn.rex_prefix);
-       //                 $display("Opcode = %s",opcode_char[instrn.opcode]);
+                        disp_byte = 0;
+                        imm_byte = 0;
 
                         /*
                         Prefix decoding
@@ -213,16 +210,17 @@ Sample way to assign values
                         temp_prefix = decode_bytes[offset*8 +: 1*8];
                           $display("Prefix %x",temp_prefix);
                         if(temp_prefix >= 64 && temp_prefix <= 79) begin
-                          length += 1;
                           rex_prefix = temp_prefix[0 : 7];
                           offset += 1;
+                          length += 1;
 
                           /*
                           Opcode decoding
                           */
-                            opcode = decode_bytes[offset*8 +: 1*8];
+                          opcode = decode_bytes[offset*8 +: 1*8];
+                          offset += 1;
+                          length += 1;
                               if(opcode != 15) begin
-                                length += 1;
                                 mod_rm_enc_byte = mod_rm_enc[opcode];
                                 $display("Opcode %x mod_rm = %x",opcode,mod_rm_enc_byte);
                                 if(mod_rm_enc_byte != 0) begin
@@ -231,24 +229,44 @@ Sample way to assign values
                                   We have found a Mod R/M byte.
                                   The direction (source / destination is available in mod_rm_enc value")
                                   */
+                                  modRM_byte = decode_bytes[offset*8 +: 1*8];
                                   offset += 1;
                                   length += 1;
-                                  modRM_byte = decode_bytes[offset*8 +: 1*8];
 
                                   /*
                                   Depending on REX prefix, print the registers
+                                  !!! WARNING: Printing is done in reverse order to ensure
+                                      readability. INTEL and GNU's ONJDUMP follow opposite
+                                      syntax
                                   */
                                   if(rex_prefix.W)
-                                    $display("%s %s %x",reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1], modRM_byte);
+                                    $display("%s %s %x",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm], modRM_byte);
                                   else          
-                                    $display("%s %s %x",reg_table_32[modRM_byte.rm], reg_table_32[modRM_byte.reg1], modRM_byte);
+                                    $display("%s %s %x",reg_table_32[modRM_byte.reg1], reg_table_32[modRM_byte.rm], modRM_byte);
                                   end
 
                                   /*
+                                  Check if there is a displacement in the instruction
+                                  If mod bit is NOT 11 or 3(decimal), then there is a displacement
+                                  Right now assuming that length of displacement is 4 bytes. Should
+                                  modify cases when length is lesser than 4 bytes
+                                  */
+                                  if(modRM_byte.mod != 3) begin
+                                    disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                    offset += 4;
+                                    length += 4; // Assuming immediate values as 4. Correct?
+                                    $display("Displsfdacement = %x%x%x%x",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1]);
+                                    //di
+                                  end
+                                  /*
                                   Check if the instruction has Immediate values
                                   */
-                                  if(mod_rm_enc_byte == "MI")
-                                    $display("Yes there is immediate");
+                                  if(mod_rm_enc_byte == "MI") begin
+                                    imm_byte = decode_bytes[offset*8 +: 4*8]; 
+                                    offset += 4;
+                                    length += 4; // Assuming immediate values as 4. Correct?
+                                    $display("Immediate = %x%x%x%x",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
+                                  end
 
                               end else begin
                                 length += 2;
@@ -258,6 +276,7 @@ Sample way to assign values
                           //$display("1st nibble = %x",rex_prefix.def);
                         end else if(temp_prefix == 102) begin
                           op_ride = temp_prefix[0 : 7];
+                          $display("Operand override = %x",op_ride);
                           length += 1;
                         end
 
