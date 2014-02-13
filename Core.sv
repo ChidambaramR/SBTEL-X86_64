@@ -161,7 +161,7 @@ Sample way to assign values
 					fetch_skip <= fetch_skip - 8;
 				end else begin
 					decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
-					$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
+					//$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
 					fetch_offset <= fetch_offset + 8;
 				end
 			end else begin
@@ -191,6 +191,7 @@ Sample way to assign values
         logic[0 : 15] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
         logic[0 : 4*8-1] disp_byte;
         logic[0 : 4*8-1] imm_byte;
+
         rex rex_prefix;
         op_override op_ride;
         mod_rm modRM_byte;
@@ -198,6 +199,7 @@ Sample way to assign values
 		if (can_decode) begin : decode_block
 
 		        // Variables which are to be reset for each new decoding
+                        $display(" ");
   	                length = 0;
                         offset = 0;
                         mod_rm_enc_byte = 0;
@@ -208,11 +210,12 @@ Sample way to assign values
                         Prefix decoding
                         */
                         temp_prefix = decode_bytes[offset*8 +: 1*8];
-                          $display("Prefix %x",temp_prefix);
+                        //$display("Prefix %x",temp_prefix);
                         if(temp_prefix >= 64 && temp_prefix <= 79) begin
                           rex_prefix = temp_prefix[0 : 7];
                           offset += 1;
                           length += 1;
+                          $write("%x ",rex_prefix);
 
                           /*
                           Opcode decoding
@@ -222,28 +225,17 @@ Sample way to assign values
                           length += 1;
                               if(opcode != 15) begin
                                 mod_rm_enc_byte = mod_rm_enc[opcode];
-                                $display("Opcode %x mod_rm = %x",opcode,mod_rm_enc_byte);
+                                //$display("%x mod_rm = %x",opcode,mod_rm_enc_byte);
+                                $write("%x ",opcode);
                                 if(mod_rm_enc_byte != 0) begin
-                                  
                                   /*
                                   We have found a Mod R/M byte.
                                   The direction (source / destination is available in mod_rm_enc value")
                                   */
                                   modRM_byte = decode_bytes[offset*8 +: 1*8];
+                                  $write("%x       ",modRM_byte);
                                   offset += 1;
                                   length += 1;
-
-                                  /*
-                                  Depending on REX prefix, print the registers
-                                  !!! WARNING: Printing is done in reverse order to ensure
-                                      readability. INTEL and GNU's ONJDUMP follow opposite
-                                      syntax
-                                  */
-                                  if(rex_prefix.W)
-                                    $display("%s %s %x",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm], modRM_byte);
-                                  else          
-                                    $display("%s %s %x",reg_table_32[modRM_byte.reg1], reg_table_32[modRM_byte.rm], modRM_byte);
-                                  end
 
                                   /*
                                   Check if there is a displacement in the instruction
@@ -252,11 +244,14 @@ Sample way to assign values
                                   modify cases when length is lesser than 4 bytes
                                   */
                                   if(modRM_byte.mod != 3) begin
-                                    disp_byte = decode_bytes[offset*8 +: 4*8]; 
-                                    offset += 4;
-                                    length += 4; // Assuming immediate values as 4. Correct?
-                                    $display("Displsfdacement = %x%x%x%x",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1]);
-                                    //di
+                                      if(modRM_byte.mod == 0) begin
+                                         disp_byte = 1; // Just to say that there is 0 displacement 
+                                      end
+                                      else begin
+                                         disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                         offset += 4;
+                                         length += 4; // Assuming immediate values as 4. Correct?
+                                      end
                                   end
                                   /*
                                   Check if the instruction has Immediate values
@@ -265,7 +260,47 @@ Sample way to assign values
                                     imm_byte = decode_bytes[offset*8 +: 4*8]; 
                                     offset += 4;
                                     length += 4; // Assuming immediate values as 4. Correct?
-                                    $display("Immediate = %x%x%x%x",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
+                                  end
+                                  end
+
+                                  /*
+                                  PRINT CODE BLOCK
+                                  Depending on REX prefix, print the registers
+                                  !!! WARNING: Printing is done in reverse order to ensure
+                                      readability. INTEL and GNU's ONJDUMP follow opposite
+                                      syntax
+                                  If Op Encode(in instruction reference of the manual) is MR, it is in
+                                  the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
+                                  */
+                                  if(rex_prefix.W) begin
+                                      /*
+                                      Register addressing mode
+                                      */  
+                                      if(mod_rm_enc_byte == "MR") begin
+                                          if(modRM_byte.mod == 0)
+                                            $write("%s, (%s)",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                          else
+                                            $write("%s, %s",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                      end
+
+                                      /*
+                                      Immediate addressing mode
+                                      */
+                                      else if(mod_rm_enc_byte == "MI") begin
+                                          if(imm_byte != 0) begin
+                                              $write("$0x%x%x%x%x, ",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
+                                          end else begin
+                                              $write("%s",reg_table_64[modRM_byte.rm]);
+                                          end 
+                                          if(disp_byte != 0) begin
+                                              $write("$0x%x%x%x%x(%s)",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[modRM_byte.reg1]);
+                                          end else begin
+                                              $write("%s",reg_table_64[modRM_byte.reg1]);
+                                          end
+                                      end
+                                  end
+                                  else begin          
+                                    $write("%s %s",reg_table_32[modRM_byte.reg1], reg_table_32[modRM_byte.rm]);
                                   end
 
                               end else begin
@@ -280,41 +315,8 @@ Sample way to assign values
                           length += 1;
                         end
 
-
 			bytes_decoded_this_cycle =+ length;
-/*                        if (decode_bytes == 0) ;
-                        small_buff = decode_bytes[0 : 7];
-                            $display("small buff = %x",small_buff);
-                        if (small_buff[0:3] == 4) begin
-                            W = small_buff[4];
-                            R = small_buff[5];
-                            Ex = small_buff[6];
-                            B = small_buff[7];
-			    bytes_decoded_this_cycle =+ 1;
-                            opcode = decode_bytes[8 : 15];
-                            if (opcode == 31)
-                              $display("XOR");
-			    bytes_decoded_this_cycle =+ 1;
-                            mod = decode_bytes[16 : 17];
-                            reg_byte = { {R}, {decode_bytes[18 : 20]} };
-                            rm_byte = { {B}, {decode_bytes[21 : 23]} };
-                            if(reg_byte == 5)
-                              $display("reg byte rbp.W = %x, R = %x, Ex = %x, B = %x, mod = %x",W,R,Ex,B,mod);
-                            if(rm_byte == 5)
-                              $display("rm byte rbp"); 
-                        end
-                            $display("Yes IT is REX prefix");
 
-                        $display("OPCODE %x: %s", opcode, opcode_char[opcode]);
-/*SOHIL CODE
-                        $display("OPCODE %d: %s", 137, opcode_char[137]);
-                        $display("OPCODE %d: %s", 131, opcode_char[131]);
-                        $display("OPCODE %d: %s", 199, opcode_char[199]);
-*/
-/*
-			bytes_decoded_this_cycle =+ 15;
-*/
-			// cse502 : following is an example of how to finish the simulation
 			if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 		end else begin
 			bytes_decoded_this_cycle = 0;
