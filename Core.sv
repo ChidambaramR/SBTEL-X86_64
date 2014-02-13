@@ -51,6 +51,7 @@ Sample way to assign values
         logic [0:255][0:1][0:7] mod_rm_enc;
         logic [255:0][7:0][7:0] opcode_char;
         logic [0:15][0:3][0:7] reg_table_64;
+        logic [0:15][0:3][0:7] reg_table_32;
         logic [7:0][7:0]str = {"       "};
         logic [8:0] i = 0;
         initial 
@@ -65,10 +66,19 @@ Sample way to assign values
             For example, 0x89 is the hex opcode. This is 137 in decimal
             */
             opcode_char[49] = "XOR     ";
-            opcode_char[137] = "MOV     ";
             opcode_char[131] = "AND     ";
             opcode_char[199] = "XOR     ";
-            mod_rm_enc[137] = "MR";
+            /*
+            Opcodes for MOV
+            */
+            opcode_char[137] = "MOV     "; // 89
+            opcode_char[199] = "MOV     "; // c7
+
+            /*
+            Mod RM byte encoding for MOV instruction
+            */
+            mod_rm_enc[137] = "MR"; // 89
+            mod_rm_enc[199] = "MI"; // c7 
 
             /*
             Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
@@ -89,7 +99,28 @@ Sample way to assign values
             reg_table_64[13] = "%r13";
             reg_table_64[14] = "%r14";
             reg_table_64[15] = "%r15";
-        end 
+       
+            /*
+            Table for 32 bit registers. It taken from os dev wiki page, "Registers table"
+            */
+            reg_table_32[0] = "%rax";
+            reg_table_32[1] = "%rcx";
+            reg_table_32[2] = "%rdx";
+            reg_table_32[3] = "%rbx";
+            reg_table_32[4] = "%rsp";
+            reg_table_32[5] = "%rbp";
+            reg_table_32[6] = "%rsi";
+            reg_table_32[7] = "%rdi";
+            reg_table_32[8] = "%r8";
+            reg_table_32[9] = "%r9";
+            reg_table_32[10] = "%r10";
+            reg_table_32[11] = "%r11";
+            reg_table_32[12] = "%r12";
+            reg_table_32[13] = "%r13";
+            reg_table_32[14] = "%r14";
+            reg_table_32[15] = "%r15";
+
+       end 
 
 	function logic mtrr_is_mmio(logic[63:0] physaddr);
 		mtrr_is_mmio = ((physaddr > 640*1024 && physaddr < 1024*1024));
@@ -157,6 +188,8 @@ Sample way to assign values
         logic[0 : 7] length;
         logic[0 : 7] offset;
         logic[0 : 1*8-1] temp_prefix;
+        logic[0 : 15] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
+
         rex rex_prefix;
         op_override op_ride;
         mod_rm modRM_byte;
@@ -166,6 +199,7 @@ Sample way to assign values
 		        // Variable keeping track of the length of the instruction
   	                length = 0;
                         offset = 0;
+                        mod_rm_enc_byte = 0;
        /*                 ins = decode_bytes[0 : length*8-1];
                         $display("ins %x",ins);
                         instrn = ins[0:23]; 
@@ -189,16 +223,33 @@ Sample way to assign values
                             opcode = decode_bytes[offset*8 +: 1*8];
                               if(opcode != 15) begin
                                 length += 1;
-                                $display("Opcode %x mod_rm = %x",opcode,mod_rm_enc[opcode]);
-                                if(mod_rm_enc != 0) begin
+                                mod_rm_enc_byte = mod_rm_enc[opcode];
+                                $display("Opcode %x mod_rm = %x",opcode,mod_rm_enc_byte);
+                                if(mod_rm_enc_byte != 0) begin
+                                  
                                   /*
                                   We have found a Mod R/M byte.
                                   The direction (source / destination is available in mod_rm_enc value")
                                   */
                                   offset += 1;
+                                  length += 1;
                                   modRM_byte = decode_bytes[offset*8 +: 1*8];
-                                  $display("%s %s",reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1]);          
-                                end
+
+                                  /*
+                                  Depending on REX prefix, print the registers
+                                  */
+                                  if(rex_prefix.W)
+                                    $display("%s %s %x",reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1], modRM_byte);
+                                  else          
+                                    $display("%s %s %x",reg_table_32[modRM_byte.rm], reg_table_32[modRM_byte.reg1], modRM_byte);
+                                  end
+
+                                  /*
+                                  Check if the instruction has Immediate values
+                                  */
+                                  if(mod_rm_enc_byte == "MI")
+                                    $display("Yes there is immediate");
+
                               end else begin
                                 length += 2;
                                 offset += 1;
