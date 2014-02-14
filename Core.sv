@@ -72,6 +72,7 @@ Sample way to assign values
             Opcodes for MOV
             */
             opcode_char[137] = "MOV     "; // 89
+            opcode_char[139] = "MOV     "; // 8B
             opcode_char[199] = "MOV     "; // c7
 
             /*
@@ -79,6 +80,7 @@ Sample way to assign values
             */
             mod_rm_enc[137] = "MR"; // 89
             mod_rm_enc[199] = "MI"; // c7 
+            mod_rm_enc[139] = "RM"; // 8B
 
             /*
             Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
@@ -224,6 +226,9 @@ Sample way to assign values
                           offset += 1;
                           length += 1;
                               if(opcode != 15) begin
+                                /*
+                                Only the primary OPCODE
+                                */
                                 mod_rm_enc_byte = mod_rm_enc[opcode];
                                 //$display("%x mod_rm = %x",opcode,mod_rm_enc_byte);
                                 $write("%x ",opcode);
@@ -253,6 +258,7 @@ Sample way to assign values
                                          length += 4; // Assuming immediate values as 4. Correct?
                                       end
                                   end
+
                                   /*
                                   Check if the instruction has Immediate values
                                   */
@@ -261,6 +267,7 @@ Sample way to assign values
                                     offset += 4;
                                     length += 4; // Assuming immediate values as 4. Correct?
                                   end
+
                                   end
 
                                   /*
@@ -273,20 +280,66 @@ Sample way to assign values
                                   the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
                                   */
                                   if(rex_prefix.W) begin
+                                  /*
+                                  64 bit operands
+                                  */
+                                      if(mod_rm_enc_byte == "MR") begin
                                       /*
                                       Register addressing mode
                                       */  
-                                      if(mod_rm_enc_byte == "MR") begin
-                                          if(modRM_byte.mod == 0)
-                                            $write("%s, (%s)",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
-                                          else
-                                            $write("%s, %s",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                          if(disp_byte != 0)
+                                              /*
+                                              There is displacement
+                                              */
+                                              if(modRM_byte.mod == 0) begin
+                                              /*
+                                              There is no immediate value for 
+                                              that displacement, then the mod bits of the modRM byte
+                                              will be 0
+                                              */
+                                                  $write("%s, (%s)",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                              end
+                                              else begin
+                                              /*
+                                              There is some displacement value
+                                              */
+                                                  $write("%s, $0x%x%x%x%x(%s)",reg_table_64[modRM_byte.reg1], disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1], reg_table_64[modRM_byte.rm]);
+                                              end
+
+                                          else begin
+                                          /*
+                                          There is no displacement
+                                          */
+                                              $write("%s, %s",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                          end
                                       end
 
+
+                                      if(mod_rm_enc_byte == "RM") begin
+                                      /*
+                                      Register addressing mode
+                                      */
+                                          if(disp_byte != 0) begin
+                                          /*
+                                          There is displacement
+                                          */
+                                              if(modRM_byte.mod == 0) begin
+                                              /*
+                                              No immediate value
+                                              */
+                                                  $write("%s, (%s)", reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1]);
+                                              end
+                                              else begin 
+                                                  $write("$0x%x%x%x%x(%s), %s",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1]);
+                                              end
+
+                                          end
+                                      end
+
+                                      else if(mod_rm_enc_byte == "MI") begin
                                       /*
                                       Immediate addressing mode
                                       */
-                                      else if(mod_rm_enc_byte == "MI") begin
                                           if(imm_byte != 0) begin
                                               $write("$0x%x%x%x%x, ",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
                                           end else begin
