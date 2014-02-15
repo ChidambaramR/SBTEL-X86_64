@@ -49,7 +49,7 @@ module Core (
     */
     //rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
     
-    logic [0:255][0:1][0:7] mod_rm_enc;
+    logic [0:255][0:2][0:7] mod_rm_enc;
     logic [255:0][7:0][7:0] opcode_char;
     logic [0:15][0:3][0:7] reg_table_64;
     logic [0:15][0:3][0:7] reg_table_32;
@@ -68,21 +68,29 @@ module Core (
          * For example, 0x89 is the hex opcode. This is 137 in decimal
          * Also store Mod RM byte encoding for each opcode
          */
-        opcode_char [49] = "XOR     "; mod_rm_enc[49] = "MR"; // 31
-        opcode_char[131] = "AND     ";
+        
+        /*
+        * Opcodes for XOR
+        */
+        opcode_char [49] = "XOR     "; mod_rm_enc[49] = "MR "; // 31
+
+        /*
+        * Opcodes for AND
+        */
+        opcode_char[131] = "AND     "; mod_rm_enc[131] = "MIS"; // 83
     
         /*
          * Opcodes for MOV
          */
-        opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR"; // 89
-        opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM"; // 8B
-        opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI"; // c7
+        opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
+        opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
+        opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
     
         /*
          * Opcodes for CALL
          */
-        opcode_char[232] = "CALLQ   "; mod_rm_enc[232] = "MR"; // E8
-        opcode_char[255] = "CALLQ   "; mod_rm_enc[255] = "MR"; // FF 
+        opcode_char[232] = "CALLQ   "; mod_rm_enc[232] = "MR "; // E8
+        opcode_char[255] = "CALLQ   "; mod_rm_enc[255] = "MR "; // FF 
     
         /*
          * Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
@@ -187,13 +195,26 @@ module Core (
     function logic opcode_inside(logic[7:0] value, low, high);
         opcode_inside = (value >= low && value <= high);
     endfunction
+
+    /*
+    Function to Swap value. Returns the swapped value
+    */
+    function logic[0 : 4*8-1] byte_swap(logic[0 : 4*8-1] inp);
+        logic[0 : 4*8-1] ret_val;
+        ret_val[0*8 : 1*8-1] = inp[3*8 : 4*8-1];
+        ret_val[1*8 : 2*8-1] = inp[2*8 : 3*8-1];
+        ret_val[2*8 : 3*8-1] = inp[1*8 : 2*8-1];
+        ret_val[3*8 : 4*8-1] = inp[0*8 : 1*8-1];
+        byte_swap = ret_val;
+    endfunction
+
     
     logic[3:0] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
-    logic[0 : 7] length;
+    logic[0 : 3] length;
     logic[0 : 7] offset;
     logic[0 : 1*8-1] temp_prefix;
-    logic[0 : 15] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
+    logic[0 : 23] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
     logic[0 : 4*8-1] disp_byte;
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
@@ -236,7 +257,6 @@ module Core (
                      * Only the primary OPCODE
                      */
                     mod_rm_enc_byte = mod_rm_enc[opcode];
-                    //$display("%x mod_rm = %x",opcode,mod_rm_enc_byte);
                     $write("%x ",opcode);
                     if (mod_rm_enc_byte != 0) begin
                         /*
@@ -268,10 +288,17 @@ module Core (
                             /*
                              * Check if the instruction has Immediate values
                              */
-                            if (mod_rm_enc_byte == "MI") begin
+                            if (mod_rm_enc_byte == "MI ") begin
                                 imm_byte = decode_bytes[offset*8 +: 4*8]; 
                                 offset += 4;
                                 length += 4; // Assuming immediate values as 4. Correct?
+                            end
+                            else if(mod_rm_enc_byte == "MIS") begin
+                                /*
+                                Immediate value is sign extended
+                                */
+                                offset += 1;
+                                length += 1;
                             end
     
                         end
@@ -290,17 +317,11 @@ module Core (
                             /*
                              * 64 bit operands
                              */
-                            regByte = modRM_byte.reg1;
-                            if (rex_prefix.R == 1) begin
-                                regByte = modRM_byte.reg1 + 8;
-                            end
+                            regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
     
-                            rmByte = modRM_byte.rm;
-                            if (rex_prefix.B == 1) begin
-                                rmByte = modRM_byte.rm + 8;
-                            end
+                            rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
     
-                            if (mod_rm_enc_byte == "MR") begin
+                            if (mod_rm_enc_byte == "MR ") begin
                             /*
                              * Register addressing mode
                              */  
@@ -320,7 +341,7 @@ module Core (
                                         /*
                                          * There is some displacement value
                                          */
-                                        $write("%s, $0x%x%x%x%x(%s)",reg_table_64[regByte], disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1], reg_table_64[rmByte]);
+                                        $write("%s, $0x%x(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
                                     end
     
                                 else begin
@@ -331,7 +352,7 @@ module Core (
                                 end
                             end
     
-                            if (mod_rm_enc_byte == "RM") begin
+                            if (mod_rm_enc_byte == "RM ") begin
                             /*
                              * Register addressing mode
                              */
@@ -346,22 +367,22 @@ module Core (
                                         $write("%s, (%s)", reg_table_64[rmByte], reg_table_64[regByte]);
                                     end
                                     else begin 
-                                        $write("$0x%x%x%x%x(%s), %s",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[rmByte], reg_table_64[regByte]);
+                                        $write("$0x%x(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
                                     end
                                 end
                             end
     
-                            else if (mod_rm_enc_byte == "MI") begin
+                            else if (mod_rm_enc_byte == "MI ") begin
                                 /*
                                  * Immediate addressing mode
                                  */
                                 if (imm_byte != 0) begin
-                                    $write("$0x%x%x%x%x, ",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
+                                    $write("$0x%x ",byte_swap(imm_byte));
                                 end else begin
                                     $write("%s",reg_table_64[rmByte]);
                                 end 
                                 if (disp_byte != 0) begin
-                                    $write("$0x%x%x%x%x(%s)",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[regByte]);
+                                    $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
                                 end else begin
                                     $write("%s",reg_table_64[regByte]);
                                 end
