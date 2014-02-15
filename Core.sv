@@ -1,3 +1,4 @@
+
 module Core (
     input[63:0] entry,
     /* verilator lint_off UNDRIVEN */ /* verilator lint_off UNUSED */ Sysbus bus /* verilator lint_on UNUSED */ /* verilator lint_on UNDRIVEN */
@@ -31,15 +32,6 @@ module Core (
         logic [0 : 7] op_prefix;
     } op_override;
     
-    /*
-     * This is the main instruction structure
-     */
-    typedef struct packed {
-        rex rex_prefix;
-        logic [0:7] opcode;
-        mod_rm mod_rm_byte;
-    } instruction;
-    
     /*typedef union packed {
         rex rex_prefix;
         op_override op_ride;
@@ -55,6 +47,7 @@ module Core (
     logic [0:15][0:3][0:7] reg_table_32;
     logic [7:0][7:0]str = {"       "};
     logic [8:0] i = 0;
+    logic [0 : 4*8-1] prog_addr = 08388832;
     
     initial 
     begin
@@ -132,7 +125,7 @@ module Core (
         reg_table_32[13] = "%r13";
         reg_table_32[14] = "%r14";
         reg_table_32[15] = "%r15";
-    
+
     end 
     
     function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -198,8 +191,8 @@ module Core (
     endfunction
 
     /*
-    Function to Swap value. Returns the swapped value
-    */
+     * Function to Swap value. Returns the swapped value
+     */
     function logic[0 : 4*8-1] byte_swap(logic[0 : 4*8-1] inp);
         logic[0 : 4*8-1] ret_val;
         ret_val[0*8 : 1*8-1] = inp[3*8 : 4*8-1];
@@ -207,6 +200,24 @@ module Core (
         ret_val[2*8 : 3*8-1] = inp[1*8 : 2*8-1];
         ret_val[3*8 : 4*8-1] = inp[0*8 : 1*8-1];
         byte_swap = ret_val;
+    endfunction
+
+    /*
+     * Returns the Instruction for a 2 byte Opcode value, i.e. of form "0F <opcode>"
+     */
+    function logic[0 : 8*8-1] decode_2_byte_opcode (logic[0 : 7] opcode);
+        logic[0 : 8*8-1] inst;
+
+        if (opcode == 5)        inst = "SYSCALL ";   // 0F 05
+        else if (opcode == 131) inst = "JAE     ";   // 0F 83
+        else if (opcode == 133) inst = "JNE     ";   // 0F 85
+        else if (opcode == 141) inst = "JGE     ";   // 0F 8D
+        else if (opcode == 143) inst = "JG      ";   // 0F 8F
+        else begin
+            assert (0) else $fatal(1, "Invalid 2 byte Opcode");
+        end
+
+        decode_2_byte_opcode = inst;
     endfunction
 
     
@@ -219,6 +230,8 @@ module Core (
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
     logic[0 : 3] rmByte;
+    logic[0 : 63] signed_imm_byte;
+    logic[0 : 7] short_imm_byte;
     
     rex rex_prefix;
     op_override op_ride;
@@ -233,28 +246,33 @@ module Core (
             mod_rm_enc_byte = 0;
             disp_byte = 0;
             imm_byte = 0;
+            prog_addr = 8388832;
    
+            $write("%x:      ", prog_addr);
             /*
              * Prefix decoding
              */
             temp_prefix = decode_bytes[offset*8 +: 1*8];
-            //$display("Prefix %x",temp_prefix);
+            /*
+             * If the byte is between 0x40 and 0x4F, then it is REX prefix
+             * Below is the decimal equivalnet check
+             */
             if (temp_prefix >= 64 && temp_prefix <= 79) begin
                 rex_prefix = temp_prefix[0 : 7];
                 offset += 1;
-                $write("%x ",rex_prefix);
+                $write("%x ", rex_prefix);
    
                 /*
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
+                $write("%x ",opcode);
                 offset += 1;
                 if (opcode != 15) begin
                     /*
                      * Only the primary OPCODE
                      */
                     mod_rm_enc_byte = mod_rm_enc[opcode];
-                    $write("%x ",opcode);
 
                     assert(mod_rm_enc_byte != 0) else $fatal;
 
@@ -264,7 +282,7 @@ module Core (
                          * The direction (source / destination is available in mod_rm_enc value")
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x       ",modRM_byte);
+                        $write("%x       ", modRM_byte);
                         offset += 1;
    
                         /*
@@ -294,6 +312,7 @@ module Core (
                             /*
                              * Immediate value is sign extended
                              */
+                            short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
                             offset += 1;
                         end
 
@@ -354,7 +373,8 @@ module Core (
                          */
                             if (disp_byte != 0) begin
                             /*
-                             * There is displacement
+                             * Register addressing mode
+                             * The direction of source and destination are interchanged
                              */
                                 if (modRM_byte.mod == 0) begin
                                 /*
@@ -373,23 +393,39 @@ module Core (
                              * Immediate addressing mode
                              */
                             if (imm_byte != 0) begin
-                                $write("$0x%x ",byte_swap(imm_byte));
+                                $write("$0x%x, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
                             end else begin
                                 $write("%s",reg_table_64[rmByte]);
                             end 
+
+                            /*
+                            Dont know why I wrote this code. Keep it. Do not delete
                             if (disp_byte != 0) begin
                                 $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
                             end else begin
                                 $write("%s",reg_table_64[regByte]);
-                            end
+                            end*/
                         end
-                    end
+
+                        else if(mod_rm_enc_byte == "MIS") begin
+                            /*
+                            * Signed extension
+                            * Right now handling only 1 byte immediate to sign extension
+                            */
+                            signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                            $write("$0x%x, %s",signed_imm_byte,reg_table_64[rmByte]);
+                        end
+
+                    end // END OF REW.W bit check
                     else begin          
                         $write("%s %s",reg_table_32[regByte], reg_table_32[rmByte]);
                     end
 
                 end else begin
-                    offset += 1;
+                    /*
+                     * Currently 2 byte Opcode Insttuction doesnt have a REX Prefix
+                     */
+                    assert(0) else $fatal;
                 end
 
                 //$display("1st nibble = %x",rex_prefix.def);
@@ -402,39 +438,66 @@ module Core (
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
                  */
                 opcode = decode_bytes[0 : 7];
-                mod_rm_enc_byte = mod_rm_enc[opcode];
                 $write("%x ", opcode);
                 offset += 1;
 
-                if (mod_rm_enc_byte == "M  ") begin
+                if (opcode != 15) begin
+                    
+                    mod_rm_enc_byte = mod_rm_enc[opcode];
+                    assert(mod_rm_enc_byte != 0) else $fatal;
 
-                    modRM_byte = decode_bytes[offset*8 +: 1*8];
-                    $write("%x          ", modRM_byte);
-                    offset += 1;
+                    if (mod_rm_enc_byte == "M  ") begin
 
-                    // reg bits need to be 2
-                    assert(modRM_byte.reg1 == 2) else $fatal;
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        $write("%x          ", modRM_byte);
+                        offset += 1;
 
-                    rmByte = {1'b0, {modRM_byte.rm}};
+                        // reg bits need to be 2
+                        assert(modRM_byte.reg1 == 2) else $fatal;
 
-                    // Print Decoded Instruction
-                    $write("%s    *%s", opcode_char[opcode], reg_table_64[rmByte]);
+                        rmByte = {1'b0, {modRM_byte.rm}};
+
+                        // Print Decoded Instruction
+                        $write("%s    *%s", opcode_char[opcode], reg_table_64[rmByte]);
+                    end
+                    else if (mod_rm_enc_byte == "D1 ") begin
+                        disp_byte = {24'b0, decode_bytes[offset*8 +: 1*8]};
+                        offset += 1;
+                        
+                        // Print Decoded Instruction
+                        $write("            ");
+                        $write("%s    %x", opcode_char[opcode], disp_byte);
+                    end
+                    else if (mod_rm_enc_byte == "D4 ") begin
+                        disp_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+     
+                        // Print Decoded Instruction
+                        // TODO: Need to add address to disp_byte
+                        $write("            ");
+                        $write("%s    %x", opcode_char[opcode], byte_swap(disp_byte));
+                    end
                 end
-                else if (mod_rm_enc_byte == "D1 ") begin
-                    disp_byte = {24'b0, decode_bytes[offset*8 +: 1*8]};
+                else begin
+                    /*
+                     * Two byte Opcode
+                     */
+                    opcode = decode_bytes[offset*8 +: 1*8];
+                    $write("%x ", opcode);
                     offset += 1;
                     
                     // Print Decoded Instruction
-                    $write("            ");
-                    $write("%s    %x", opcode_char[opcode], disp_byte);
-                end
-                else if (mod_rm_enc_byte == "D4 ") begin
-                    disp_byte = decode_bytes[offset*8 +: 4*8];
-                    offset += 4;
- 
-                    // Print Decoded Instruction
-                    $write("            ");
-                    $write("%s    %x", opcode_char[opcode], disp_byte);
+                    $write("         ");
+                    $write("%s", decode_2_byte_opcode(opcode));
+
+                    // All the 2 byte Opcodes except "0F 05" have a 4 byte displacement
+                    if (opcode != 5) begin
+                        disp_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+     
+                        // TODO: Need to add address to disp_byte
+                        $write("    %x", byte_swap(disp_byte));
+                    end
                 end
             end
     
