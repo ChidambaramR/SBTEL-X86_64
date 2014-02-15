@@ -219,6 +219,8 @@ module Core (
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
     logic[0 : 3] rmByte;
+    logic[0 : 63] signed_imm_byte;
+    logic[0 : 7] short_imm_byte;
     
     rex rex_prefix;
     op_override op_ride;
@@ -239,7 +241,10 @@ module Core (
              * Prefix decoding
              */
             temp_prefix = decode_bytes[offset*8 +: 1*8];
-            //$display("Prefix %x",temp_prefix);
+            /*
+            If the byte is between 0x40 and 0x4F, then it is REX prefix
+            Below is the decimal equivalnet check
+            */
             if (temp_prefix >= 64 && temp_prefix <= 79) begin
                 rex_prefix = temp_prefix[0 : 7];
                 offset += 1;
@@ -297,6 +302,7 @@ module Core (
                                 /*
                                 Immediate value is sign extended
                                 */
+                                short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
                                 offset += 1;
                                 length += 1;
                             end
@@ -355,6 +361,7 @@ module Core (
                             if (mod_rm_enc_byte == "RM ") begin
                             /*
                              * Register addressing mode
+                             * The direction of source and destination are interchanged
                              */
                                 if (disp_byte != 0) begin
                                 /*
@@ -377,17 +384,30 @@ module Core (
                                  * Immediate addressing mode
                                  */
                                 if (imm_byte != 0) begin
-                                    $write("$0x%x ",byte_swap(imm_byte));
+                                    $write("$0x%x, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
                                 end else begin
                                     $write("%s",reg_table_64[rmByte]);
                                 end 
+
+                                /*
+                                Dont know why I wrote this code. Keep it. Do not delete
                                 if (disp_byte != 0) begin
                                     $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
                                 end else begin
                                     $write("%s",reg_table_64[regByte]);
-                                end
+                                end*/
                             end
-                        end
+
+                            else if(mod_rm_enc_byte == "MIS") begin
+                                /*
+                                * Signed extension
+                                * Right now handling only 1 byte immediate to sign extension
+                                */
+                                signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                                $write("$0x%x, %s",signed_imm_byte,reg_table_64[rmByte]);
+                            end
+
+                        end // END OF REW.W bit check
                         else begin          
                             $write("%s %s",reg_table_32[regByte], reg_table_32[rmByte]);
                         end
