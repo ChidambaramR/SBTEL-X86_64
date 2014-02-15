@@ -85,7 +85,13 @@ module Core (
         opcode_char[114] = "JB      "; mod_rm_enc[114] = "D1 "; // 72
         opcode_char[232] = "CALLQ   "; mod_rm_enc[232] = "D4 "; // E8
         opcode_char[255] = "CALLQ   "; mod_rm_enc[255] = "M  "; // FF 
-    
+        
+        /*
+         * Opcodes for Instructions w/o REX Prefixes and w/o MOD RM
+         */
+        opcode_char[108] = "INSB    "; // 6C
+        opcode_char[111] = "OUTSL   "; // 6F
+
         /*
          * Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
          */
@@ -232,6 +238,7 @@ module Core (
     logic[0 : 3] rmByte;
     logic[0 : 63] signed_imm_byte;
     logic[0 : 7] short_imm_byte;
+    logic next_instruction;
     
     rex rex_prefix;
     op_override op_ride;
@@ -247,6 +254,7 @@ module Core (
             disp_byte = 0;
             imm_byte = 0;
             prog_addr = 8388832;
+            next_instruction = 1;        
    
             $write("%x:      ", prog_addr);
             /*
@@ -268,7 +276,21 @@ module Core (
                 opcode = decode_bytes[offset*8 +: 1*8];
                 $write("%x ",opcode);
                 offset += 1;
-                if (opcode != 15) begin
+                if (opcode == 101)
+                begin
+                    next_instruction = 0;
+                    $write("          ");
+                    $write("Null Instructions");                
+                end
+                else if ((opcode >= 64) && (opcode <= 79))
+                begin
+                    opcode = decode_bytes[offset*8 +: 1*8];
+                    $write("%x ",opcode);
+                    offset += 1;                    
+                    next_instruction = 1;
+                end
+                if (next_instruction == 1) begin
+                if (opcode != 14) begin
                     /*
                      * Only the primary OPCODE
                      */
@@ -427,12 +449,20 @@ module Core (
                      */
                     assert(0) else $fatal;
                 end
+                end
 
                 //$display("1st nibble = %x",rex_prefix.def);
             end else if (temp_prefix == 102) begin
                 op_ride = temp_prefix[0 : 7];
                 $display("Operand override = %x",op_ride);
                 offset += 1;
+            
+            end else if (temp_prefix == 101) begin
+                /* GS Segment Override Prefix */
+                offset += 1;
+                $write("%x", opcode);
+                $write("GS");
+
             end else begin
                 /*
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
@@ -441,7 +471,19 @@ module Core (
                 $write("%x ", opcode);
                 offset += 1;
 
-                if (opcode != 15) begin
+                if (opcode == 108) begin
+                    /* INSB instruction . No Prefix, No Mod RM */
+                    opcode = decode_bytes[0 : 7];
+                    $write("            ");
+                    $write("%s    (%%dx), %%es:(%%rdi)",opcode_char[opcode]);
+            
+                end else if (opcode == 111) begin
+                    /* OUTSB instruction . No Prefix, No Mod RM */
+                    opcode = decode_bytes[0 : 7];
+                    $write("            ");
+                    $write("%s     %%ds:(%%rsi), %%dx)",opcode_char[opcode]);
+                
+                end else if (opcode != 15) begin
                     
                     mod_rm_enc_byte = mod_rm_enc[opcode];
                     assert(mod_rm_enc_byte != 0) else $fatal;
