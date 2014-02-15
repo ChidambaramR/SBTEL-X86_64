@@ -1,3 +1,4 @@
+
 module Core (
     input[63:0] entry,
     /* verilator lint_off UNDRIVEN */ /* verilator lint_off UNUSED */ Sysbus bus /* verilator lint_on UNUSED */ /* verilator lint_on UNDRIVEN */
@@ -55,6 +56,7 @@ module Core (
     logic [0:15][0:3][0:7] reg_table_32;
     logic [7:0][7:0]str = {"       "};
     logic [8:0] i = 0;
+    logic [0 : 4*8-1] prog_addr = 08388832;
     
     initial 
     begin
@@ -131,9 +133,12 @@ module Core (
         reg_table_32[13] = "%r13";
         reg_table_32[14] = "%r14";
         reg_table_32[15] = "%r15";
+
     
     end 
     
+        
+
     function logic mtrr_is_mmio(logic[63:0] physaddr);
         mtrr_is_mmio = ((physaddr > 640*1024 && physaddr < 1024*1024));
     endfunction
@@ -236,6 +241,7 @@ module Core (
             mod_rm_enc_byte = 0;
             disp_byte = 0;
             imm_byte = 0;
+            prog_addr = 8388832;
    
             /*
              * Prefix decoding
@@ -249,7 +255,7 @@ module Core (
                 rex_prefix = temp_prefix[0 : 7];
                 offset += 1;
                 length += 1;
-                $write("%x ",rex_prefix);
+                $write("%x:      %x ",prog_addr, rex_prefix);
    
                 /*
                  * Opcode decoding
@@ -425,6 +431,7 @@ module Core (
                 end
     
                 bytes_decoded_this_cycle =+ length;
+                prog_addr += length;
     
                 if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
