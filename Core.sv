@@ -65,12 +65,11 @@ Sample way to assign values
             Following values are converted into decimal from hex.
             For example, 0x89 is the hex opcode. This is 137 in decimal
             */
-            opcode_char[49] = "XOR     ";
-            opcode_char[131] = "AND     ";
+            opcode_char[49] = "XOR     "; // 31
             opcode_char[199] = "XOR     ";
-            /*
-            Opcodes for MOV
-            */
+
+            opcode_char[131] = "AND     ";
+
             opcode_char[137] = "MOV     "; // 89
             opcode_char[139] = "MOV     "; // 8B
             opcode_char[199] = "MOV     "; // c7
@@ -79,8 +78,10 @@ Sample way to assign values
             Mod RM byte encoding for MOV instruction
             */
             mod_rm_enc[137] = "MR"; // 89
-            mod_rm_enc[199] = "MI"; // c7 
             mod_rm_enc[139] = "RM"; // 8B
+            mod_rm_enc[199] = "MI"; // c7
+
+            mod_rm_enc[49] = "MR"; // 31 
 
             /*
             Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
@@ -193,6 +194,8 @@ Sample way to assign values
         logic[0 : 15] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
         logic[0 : 4*8-1] disp_byte;
         logic[0 : 4*8-1] imm_byte;
+        logic[0 : 3] regByte;
+        logic[0 : 3] rmByte;
 
         rex rex_prefix;
         op_override op_ride;
@@ -279,10 +282,21 @@ Sample way to assign values
                                   If Op Encode(in instruction reference of the manual) is MR, it is in
                                   the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
                                   */
+                                  $write("%s    ",opcode_char[opcode]);
                                   if(rex_prefix.W) begin
                                   /*
                                   64 bit operands
                                   */
+                                  regByte = modRM_byte.reg1;
+                                  if(rex_prefix.R == 1) begin
+                                    regByte = modRM_byte.reg1 + 8;
+                                  end
+
+                                  rmByte = modRM_byte.rm;
+                                  if(rex_prefix.B == 1) begin
+                                    rmByte = modRM_byte.rm + 8;
+                                  end
+
                                       if(mod_rm_enc_byte == "MR") begin
                                       /*
                                       Register addressing mode
@@ -297,20 +311,20 @@ Sample way to assign values
                                               that displacement, then the mod bits of the modRM byte
                                               will be 0
                                               */
-                                                  $write("%s, (%s)",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                                  $write("%s, (%s)",reg_table_64[regByte], reg_table_64[rmByte]);
                                               end
                                               else begin
                                               /*
                                               There is some displacement value
                                               */
-                                                  $write("%s, $0x%x%x%x%x(%s)",reg_table_64[modRM_byte.reg1], disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1], reg_table_64[modRM_byte.rm]);
+                                                  $write("%s, $0x%x%x%x%x(%s)",reg_table_64[regByte], disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1], reg_table_64[rmByte]);
                                               end
 
                                           else begin
                                           /*
                                           There is no displacement
                                           */
-                                              $write("%s, %s",reg_table_64[modRM_byte.reg1], reg_table_64[modRM_byte.rm]);
+                                              $write("%s, %s",reg_table_64[regByte], reg_table_64[rmByte]);
                                           end
                                       end
 
@@ -327,10 +341,10 @@ Sample way to assign values
                                               /*
                                               No immediate value
                                               */
-                                                  $write("%s, (%s)", reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1]);
+                                                  $write("%s, (%s)", reg_table_64[rmByte], reg_table_64[regByte]);
                                               end
                                               else begin 
-                                                  $write("$0x%x%x%x%x(%s), %s",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[modRM_byte.rm], reg_table_64[modRM_byte.reg1]);
+                                                  $write("$0x%x%x%x%x(%s), %s",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[rmByte], reg_table_64[regByte]);
                                               end
 
                                           end
@@ -343,17 +357,17 @@ Sample way to assign values
                                           if(imm_byte != 0) begin
                                               $write("$0x%x%x%x%x, ",imm_byte[3*8 : 4*8-1], imm_byte[2*8 : 3*8-1], imm_byte[1*8 : 2*8-1], imm_byte[0*8 : 1*8-1]);
                                           end else begin
-                                              $write("%s",reg_table_64[modRM_byte.rm]);
+                                              $write("%s",reg_table_64[rmByte]);
                                           end 
                                           if(disp_byte != 0) begin
-                                              $write("$0x%x%x%x%x(%s)",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[modRM_byte.reg1]);
+                                              $write("$0x%x%x%x%x(%s)",disp_byte[3*8 : 4*8-1], disp_byte[2*8 : 3*8-1], disp_byte[1*8 : 2*8-1], disp_byte[0*8 : 1*8-1],reg_table_64[regByte]);
                                           end else begin
-                                              $write("%s",reg_table_64[modRM_byte.reg1]);
+                                              $write("%s",reg_table_64[regByte]);
                                           end
                                       end
                                   end
                                   else begin          
-                                    $write("%s %s",reg_table_32[modRM_byte.reg1], reg_table_32[modRM_byte.rm]);
+                                    $write("%s %s",reg_table_32[regByte], reg_table_32[rmByte]);
                                   end
 
                               end else begin
