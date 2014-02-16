@@ -44,7 +44,12 @@ module Core (
     logic [7:0][7:0]str = {"       "};
     logic [8:0] i = 0;
     logic [0 : 4*8-1] prog_addr = 08388832;
-    
+    /*
+    * 2D Array
+    */
+    logic [0:23] opcode_enc[0:14][0:8] ;
+    logic [0:255][0:0][0:3] opcode_group;
+
     initial 
     begin
         for (i = 0; i < 256; i++)
@@ -57,6 +62,7 @@ module Core (
          * For example, 0x89 is the hex opcode. This is 137 in decimal
          * Also store Mod RM byte encoding for each opcode
          */
+
         
         /*
          * Opcodes for XOR
@@ -67,6 +73,8 @@ module Core (
          * Opcodes for AND
          */
         opcode_char[131] = "AND     "; mod_rm_enc[131] = "MIS"; // 83
+        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 83
+        opcode_char[33] = "AND     "; mod_rm_enc[33] = "MR "; // 83
     
         /*
          * Opcodes for MOV
@@ -87,6 +95,32 @@ module Core (
          */
         opcode_char[108] = "INSB    "; // 6C
         opcode_char[111] = "OUTSL   "; // 6F
+
+        /*
+        * Opcodes for SUB
+        */
+        opcode_char[41] = "SUB      "; mod_rm_enc[41] = "MR " ; // 29
+
+        /*
+        * Shared OPCODE encoding. This block and the group block is taken from table
+        * A6 in Appendix A of intel manual.
+        */
+        opcode_enc[1][0] = "ADD";
+        opcode_enc[1][1] = "OR ";
+        opcode_enc[1][2] = "ADC";
+        opcode_enc[1][3] = "SBB";
+        opcode_enc[1][4] = "AND";
+        opcode_enc[1][5] = "SUB";
+        opcode_enc[1][6] = "XOR";
+        opcode_enc[1][7] = "SUB";
+
+        /*
+        * Group of Shared opcode
+        */
+        opcode_group[128] = 1;
+        opcode_group[129] = 1;
+        opcode_group[130] = 1;
+        opcode_group[131] = 1;
 
         /*
          * Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
@@ -300,7 +334,7 @@ module Core (
                 else begin
                     $write("%x ",opcode);
                     offset += 1;
-                    if (opcode != 14) begin
+                    if (opcode != 15) begin
                     /*
                      * Only the primary OPCODE
                      */
@@ -360,14 +394,24 @@ module Core (
                      * If Op Encode(in instruction reference of the manual) is MR, it is in
                      * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
                      */
-                    $write("%s    ",opcode_char[opcode]);
+                    regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
+
+                    rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
+
+                    if(opcode >= 128 && opcode <= 131) begin
+                        /*
+                        * We might have a shared opcode
+                        */
+                        $write("%s         ",opcode_enc[opcode_group[opcode]][regByte]);
+                    end
+                    else begin
+                        $write("%s    ",opcode_char[opcode]);
+                    end
+
                     if (rex_prefix.W) begin
                         /*
                          * 64 bit operands
                          */
-                        regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
-
-                        rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
 
                         if (mod_rm_enc_byte == "MR ") begin
                         /*
@@ -452,11 +496,11 @@ module Core (
                             /*
                              * Immediate addressing mode
                              */
-                            if (imm_byte != 0) begin
+                            //if (imm_byte != 0) begin
                                 $write("$0x%x, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
-                            end else begin
-                                $write("%s",reg_table_64[rmByte]);
-                            end 
+                            //end else begin
+                            //    $write("%s",reg_table_64[rmByte]);
+                            //end 
 
                             /*
                             Dont know why I wrote this code. Keep it. Do not delete

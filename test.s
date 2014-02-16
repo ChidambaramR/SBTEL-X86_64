@@ -9,3 +9,20 @@ mov    %rax,%rsi
 mov    $0x0,%rax
 mov    %rax,0xffffffffffffffc0(%rbp)
 mov    %rax,%rdi
+
+and    $0xfffffffffffffff0,%rsp
+and    $0xfffffffffffffff8,%rax
+and    $0xff,%rcx
+and    $0xff00,%rcx
+and    $0xff0000,%rcx
+and    %rax,%rcx
+and    %rax,%rcx
+and    $0x7,%rax
+and    $0x50, %rsp
+
+sub    $0x50,%rsp
+sub    %rcx,%rax
+sub    %rcx,%rax
+sub    $0x1,%rax
+sub    $0x50,%rsp
+sub    $0x10,%rsp
