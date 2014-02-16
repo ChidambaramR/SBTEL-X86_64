@@ -41,6 +41,7 @@ module Core (
     logic [255:0][7:0][7:0] opcode_char;
     logic [0:15][0:3][0:7] reg_table_64;
     logic [0:15][0:3][0:7] reg_table_32;
+    logic [0:15][0:3][0:7] reg_table_8;
     logic [7:0][7:0]str = {"       "};
     logic [8:0] i = 0;
     logic [0 : 4*8-1] prog_addr = 08388832;
@@ -73,9 +74,10 @@ module Core (
          * Opcodes for AND
          */
         opcode_char[131] = "AND     "; mod_rm_enc[131] = "MIS"; // 83
-        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 83
-        opcode_char[33] = "AND     "; mod_rm_enc[33] = "MR "; // 83
-    
+        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 81
+        opcode_char[33]  = "AND     "; mod_rm_enc[33]  = "MR "; // 21
+        opcode_char[32]  = "AND     "; mod_rm_enc[32]  = "MR "; // 20
+         
         /*
          * Opcodes for MOV
          */
@@ -198,6 +200,26 @@ module Core (
         reg_table_32[14] = "%r14";
         reg_table_32[15] = "%r15";
 
+        /*
+         * Table for 8 bit registers. It taken from os dev wiki page, "Registers table"
+         */
+        reg_table_8[0] = "%al";
+        reg_table_8[1] = "%cl";
+        reg_table_8[2] = "%dl";
+        reg_table_8[3] = "%bl";
+        reg_table_8[4] = "%ah";
+        reg_table_8[5] = "%ch";
+        reg_table_8[6] = "%dh";
+        reg_table_8[7] = "%bh";
+        reg_table_8[8] = "%r8";
+        reg_table_8[9] = "%r9";
+        reg_table_8[10] = "%r10";
+        reg_table_8[11] = "%r11";
+        reg_table_8[12] = "%r12";
+        reg_table_8[13] = "%r13";
+        reg_table_8[14] = "%r14";
+        reg_table_8[15] = "%r15";
+    
     end 
     
     function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -263,7 +285,7 @@ module Core (
     endfunction
 
     /*
-     * Function to Swap value. Returns the swapped value
+     * Function to Swap 32 bit value. Returns the swapped value
      */
     function logic[0 : 4*8-1] byte_swap(logic[0 : 4*8-1] inp);
         logic[0 : 4*8-1] ret_val;
@@ -327,7 +349,6 @@ module Core (
             disp_byte = 0;
             imm_byte = 0;
             prog_addr = 8388832;
-            //next_instruction = 1;        
             short_disp_byte = 0;
             opcode_handled = 0;
    
@@ -395,10 +416,12 @@ module Core (
                         offset += 1;
    
                         /*
+                         *
                          * Check if there is a displacement in the instruction
                          * If mod bit is NOT 11 or 3(decimal), then there is a displacement
-                         * Right now assuming that length of displacement is 4 bytes. Should
-                         * modify cases when length is lesser than 4 bytes
+                         * If mod bit is 1 then displacement is 1 byte.
+                         * If mod bit is 2 then displacement is 4 byte.
+                         *
                          */
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
@@ -589,6 +612,108 @@ module Core (
                 $write("            ");
                 $write(" GS");
 
+            end else if (temp_prefix == 100) begin
+                /* FS Segment Override Prefix */
+                rex_prefix = temp_prefix[0 : 7];
+                offset += 1;
+                $write("%x ", rex_prefix);
+                opcode = decode_bytes[offset*8 +: 1*8]; 
+                offset += 1;
+                $write("%x", opcode);
+                if (opcode != 15) begin
+                    mod_rm_enc_byte = mod_rm_enc[opcode];
+                    assert(mod_rm_enc_byte != 0) else $fatal;
+                    
+                    if (mod_rm_enc_byte == "MR ") begin
+                        /*
+                         * Register addressing mode
+                         */
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        $write(" %x", modRM_byte);
+                        offset += 1;
+
+                        /*
+                         * PRINT CODE BLOCK
+                         * Depending on REX prefix, print the registers
+                         * !!! WARNING: Printing is done in reverse order to ensure
+                         *     readability. INTEL and GNU's ONJDUMP follow opposite
+                         *     syntax
+                         * If Op Encode(in instruction reference of the manual) is MR, it is in
+                         * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
+                         * Since no REX prefix is present B and R bits are 0.
+                         */
+                         regByte = {{1'b0}, {modRM_byte.reg1}};
+
+                         rmByte = {{1'b0}, {modRM_byte.rm}};
+
+                        /*
+                         *
+                         * Check if there is a displacement in the instruction
+                         * If mod bit is NOT 11 or 3(decimal), then there is a displacement
+                         * If mod bit is 1 then displacement is 1 byte.
+                         * If mod bit is 2 then displacement is 4 byte.
+                         *
+                         */
+                        
+                        if (modRM_byte.mod != 3) begin
+                            if (modRM_byte.mod == 1) begin
+                                short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                $write(" %x", short_disp_byte);
+                                offset += 1;
+                            end
+                            else begin
+                                /* TODO : Need to handle printing 4 bytes */
+                                disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                offset += 4; // Assuming immediate values as 4. Correct?
+                            end
+                        end
+                        
+                        $write("       ");
+                        $write("%s    ",opcode_char[opcode]);
+                        
+                            if (disp_byte != 0 || short_disp_byte != 0)
+                                /*
+                                 * There is displacement
+                                 */
+                                if (modRM_byte.mod == 0) begin
+                                    /*
+                                     * There is no immediate value for 
+                                     * that displacement, then the mod bits of the modRM byte
+                                     * will be 0
+                                     */
+                                    $write("%s, %%:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                                end
+                                else begin
+                                    /*
+                                     * There is some displacement value
+                                     */
+                                    if(modRM_byte.mod == 2) begin
+                                        /*
+                                        * It is NOT sign extended. The displacement value is 8 bits
+                                        */
+                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                    end
+
+                                    else if(modRM_byte.mod == 1) begin
+                                        /*
+                                        * The displacement value is SIGN extended
+                                        */
+                                        signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
+                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(signed_disp_byte), reg_table_64[rmByte]);
+                                    end
+                                end
+
+                            else begin
+                                /*
+                                 * There is no displacement
+                                 */
+                                $write("%s, %%fs:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                            end
+                        end
+
+                                        
+                end
+
             end else begin
                 /*
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
@@ -645,6 +770,205 @@ module Core (
                         $write("            ");
                         $write("%s    %x", opcode_char[opcode], byte_swap(disp_byte));
                     end
+
+
+                    /* 
+                     * There is no REX prefix for these instructions. 
+                     * In 64-bit mode, r/m8 can not be encoded to access the following byte registers if a REX prefix is used: AH, BH, CH, DH.  
+                     *
+                     */
+                     
+                    else if (mod_rm_enc_byte == "MR ") begin
+                        /*
+                         * Register addressing mode
+                         */
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        $write("%x", modRM_byte);
+                        offset += 1;
+
+                        /*
+                         * PRINT CODE BLOCK
+                         * Depending on REX prefix, print the registers
+                         * !!! WARNING: Printing is done in reverse order to ensure
+                         *     readability. INTEL and GNU's ONJDUMP follow opposite
+                         *     syntax
+                         * If Op Encode(in instruction reference of the manual) is MR, it is in
+                         * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
+                         * Since no REX prefix is present B and R bits are 0.
+                         */
+                        regByte = {{1'b0}, {modRM_byte.reg1}};
+
+                        rmByte = {{1'b0}, {modRM_byte.rm}};
+
+                        /*
+                         *
+                         * Check if there is a displacement in the instruction
+                         * If mod bit is NOT 11 or 3(decimal), then there is a displacement
+                         * If mod bit is 1 then displacement is 1 byte.
+                         * If mod bit is 2 then displacement is 4 byte.
+                         *
+                         */
+                        
+                        if (modRM_byte.mod != 3) begin
+                            if (modRM_byte.mod == 1) begin
+                                short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                $write(" %x", short_disp_byte);
+                                offset += 1;
+                            end
+                            else begin
+                                /* TODO : Need to handle printing 4 bytes */
+                                disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                offset += 4; // Assuming immediate values as 4. Correct?
+                            end
+                        end
+                        
+                        $write("       ");
+                        $write("%s    ",opcode_char[opcode]);
+                        
+                            if (disp_byte != 0 || short_disp_byte != 0)
+                                /*
+                                 * There is displacement
+                                 */
+                                if (modRM_byte.mod == 0) begin
+                                    /*
+                                     * There is no immediate value for 
+                                     * that displacement, then the mod bits of the modRM byte
+                                     * will be 0
+                                     */
+                                    $write("%s, (%s)",reg_table_8[regByte], reg_table_8[rmByte]);
+                                end
+                                else begin
+                                    /*
+                                     * There is some displacement value
+                                     */
+                                    if(modRM_byte.mod == 2) begin
+                                        /*
+                                        * It is NOT sign extended. The displacement value is 8 bits
+                                        */
+                                        $write("%s, $0x%h(%s)",reg_table_8[regByte], disp_byte, reg_table_8[rmByte]);
+                                    end
+
+                                    else if(modRM_byte.mod == 1) begin
+                                        /*
+                                        * The displacement value is SIGN extended
+                                        */
+                                        $write("%s, $0x%h(%s)",reg_table_8[regByte], short_disp_byte, reg_table_8[rmByte]);
+                                    end
+                                end
+
+                            else begin
+                                /*
+                                 * There is no displacement
+                                 */
+                                $write("%s, %s",reg_table_8[regByte], reg_table_8[rmByte]);
+                            end
+                        end
+
+                        else if (mod_rm_enc_byte == "RM ") begin
+                        /*
+                         * Register addressing mode
+                         */
+                        
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        $write("%x", modRM_byte);
+                        offset += 1;
+                        
+                        /*
+                         * PRINT CODE BLOCK
+                         * Depending on REX prefix, print the registers
+                         * !!! WARNING: Printing is done in reverse order to ensure
+                         *     readability. INTEL and GNU's ONJDUMP follow opposite
+                         *     syntax
+                         * If Op Encode(in instruction reference of the manual) is MR, it is in
+                         * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
+                         * Since no REX prefix is present B and R bits are 0.
+                         */
+                        regByte = {{1'b0}, {modRM_byte.reg1}};
+
+                        rmByte = {{1'b0}, {modRM_byte.rm}};
+                        
+                        /*
+                         *
+                         * Check if there is a displacement in the instruction
+                         * If mod bit is NOT 11 or 3(decimal), then there is a displacement
+                         * If mod bit is 1 then displacement is 1 byte.
+                         * If mod bit is 2 then displacement is 4 byte.
+                         *
+                         */
+                        
+                        if (modRM_byte.mod != 3) begin
+                            if (modRM_byte.mod == 1) begin
+                                short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                $write(" %x", short_disp_byte);
+                                offset += 1;
+                            end
+                            else begin
+                                /* TODO : Need to handle printing 4 bytes */
+                                disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                offset += 4; // Assuming immediate values as 4. Correct?
+                            end
+                        end
+                        
+                        $write("      ");
+                        $write("%s    ",opcode_char[opcode]);
+                            
+                            if (disp_byte != 0 || short_disp_byte != 0) begin
+                            /*
+                             * Register addressing mode
+                             * The direction of source and destination are interchanged
+                             */
+                                if (modRM_byte.mod == 0) begin
+                                /*
+                                 * No immediate value
+                                 */
+                                    $write("%s, (%s)", reg_table_8[rmByte], reg_table_8[regByte]);
+                                end
+
+                                else begin 
+                                    if(modRM_byte.mod == 2) begin
+                                        /*
+                                        * It is NOT sign extended. The displacement value is 32 bits
+                                        */
+                                        $write("$0x%h(%s), %s",disp_byte, reg_table_8[rmByte], reg_table_8[regByte]); 
+                                    end
+    
+                                    else if(modRM_byte.mod == 1) begin
+                                        /*
+                                        * The displacement value is sign extended
+                                        */
+                                        $write("$0x%h(%s), %s",short_disp_byte, reg_table_8[rmByte], reg_table_8[regByte]);
+                                    end
+                                end
+                            end
+                        end
+
+                        else if (mod_rm_enc_byte == "MI ") begin
+                            /*
+                             * Immediate addressing mode
+                             */
+                            //if (imm_byte != 0) begin
+                                $write("$0x%h, %s",byte_swap(imm_byte), reg_table_8[rmByte]);
+                            //end else begin
+                            //    $write("%s",reg_table_64[rmByte]);
+                            //end 
+
+                            /*
+                            Dont know why I wrote this code. Keep it. Do not delete
+                            if (disp_byte != 0) begin
+                                $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
+                            end else begin
+                                $write("%s",reg_table_64[regByte]);
+                            end*/
+                        end
+
+                        else if(mod_rm_enc_byte == "MIS") begin
+                            /*
+                            * Signed extension
+                            * Right now handling only 1 byte immediate to sign extension
+                            */
+                            signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                            $write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
+                        end
                     else if (mod_rm_enc_byte == "O  ") begin
                         /*
                         * Should work for PUSH/POP
