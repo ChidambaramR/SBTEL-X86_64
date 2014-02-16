@@ -32,10 +32,6 @@ module Core (
         logic [0 : 7] op_prefix;
     } op_override;
     
-    /*typedef union packed {
-        rex rex_prefix;
-        op_override op_ride;
-    } prefix;*/
     /*
     Sample way to assign values
     */
@@ -236,9 +232,15 @@ module Core (
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
     logic[0 : 3] rmByte;
+
+    /*
+    * Signed immediate and displacement variable declaration. try to re-use these variables
+    */
     logic[0 : 63] signed_imm_byte;
     logic[0 : 7] short_imm_byte;
-    logic next_instruction;
+    //logic next_instruction;
+    logic[0 : 63] signed_disp_byte;
+    logic[0 : 7] short_disp_byte;
     
     rex rex_prefix;
     op_override op_ride;
@@ -254,7 +256,8 @@ module Core (
             disp_byte = 0;
             imm_byte = 0;
             prog_addr = 8388832;
-            next_instruction = 1;        
+            //next_instruction = 1;        
+            short_disp_byte = 0;
    
             $write("%x:      ", prog_addr);
             /*
@@ -274,8 +277,7 @@ module Core (
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
-                $write("%x ",opcode);
-                offset += 1;
+                /* Old Logic for Next Instruction 
                 if (opcode == 101)
                 begin
                     next_instruction = 0;
@@ -290,7 +292,15 @@ module Core (
                     next_instruction = 1;
                 end
                 if (next_instruction == 1) begin
-                if (opcode != 14) begin
+                */
+                /* Check if next byte is in opcode table else jump to next instruction */ 
+                if (opcode_char[opcode] == str) begin
+                    //offset -= 1;
+                end 
+                else begin
+                    $write("%x ",opcode);
+                    offset += 1;
+                    if (opcode != 14) begin
                     /*
                      * Only the primary OPCODE
                      */
@@ -314,8 +324,9 @@ module Core (
                          * modify cases when length is lesser than 4 bytes
                          */
                         if (modRM_byte.mod != 3) begin
-                            if (modRM_byte.mod == 0) begin
-                                disp_byte = 1; // Just to say that there is 0 displacement 
+                            if (modRM_byte.mod == 1) begin
+                                short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                offset += 1;
                             end
                             else begin
                                 disp_byte = decode_bytes[offset*8 +: 4*8]; 
@@ -362,7 +373,7 @@ module Core (
                         /*
                          * Register addressing mode
                          */  
-                            if (disp_byte != 0)
+                            if (disp_byte != 0 || short_disp_byte != 0)
                                 /*
                                  * There is displacement
                                  */
@@ -378,7 +389,20 @@ module Core (
                                     /*
                                      * There is some displacement value
                                      */
-                                    $write("%s, $0x%x(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                    if(modRM_byte.mod == 2) begin
+                                        /*
+                                        * It is NOT sign extended. The displacement value is 32 bits
+                                        */
+                                        $write("%s, $0x%x(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                    end
+
+                                    else if(modRM_byte.mod == 1) begin
+                                        /*
+                                        * The displacement value is SIGN extended
+                                        */
+                                        signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                                        $write("%s, $0x%x(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
+                                    end
                                 end
 
                             else begin
@@ -393,7 +417,7 @@ module Core (
                         /*
                          * Register addressing mode
                          */
-                            if (disp_byte != 0) begin
+                            if (disp_byte != 0 || short_disp_byte != 0) begin
                             /*
                              * Register addressing mode
                              * The direction of source and destination are interchanged
@@ -404,8 +428,22 @@ module Core (
                                  */
                                     $write("%s, (%s)", reg_table_64[rmByte], reg_table_64[regByte]);
                                 end
+
                                 else begin 
-                                    $write("$0x%x(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
+                                    if(modRM_byte.mod == 2) begin
+                                        /*
+                                        * It is NOT sign extended. The displacement value is 32 bits
+                                        */
+                                        $write("$0x%x(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
+                                    end
+    
+                                    else if(modRM_byte.mod == 1) begin
+                                        /*
+                                        * The displacement value is sign extended
+                                        */
+                                        signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                                        $write("$0x%x(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
+                                    end
                                 end
                             end
                         end
@@ -461,7 +499,8 @@ module Core (
                 /* GS Segment Override Prefix */
                 offset += 1;
                 $write("%x", opcode);
-                $write("GS");
+                $write("            ");
+                $write(" GS");
 
             end else begin
                 /*
@@ -542,7 +581,6 @@ module Core (
                     end
                 end
             end
-    
             bytes_decoded_this_cycle =+ offset;
     
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;

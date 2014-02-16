@@ -1,17 +1,11 @@
-mov %rax, %rbx
-movq $0x100, 0x10050(%rcx)
-movq $0x100, 0x10050(%rdx)
-mov %rax, (%rdx)
-mov 0x100(%rax), %rdx
-mov %rdx, 0x100(%rax)
-mov $0x401, %rdi
-mov $0x401964, %rdi
-adc $0x10, %rax
-adc $0x10, %eax
-adc $0x10, %ah
-adc $0x34242420, %rax
-adc $0x34242420, %rdx
-adc %rcx, %rdx
-adc %eax, %edx
-adc %ax, %dx
-adc %bh, %cl
+mov    %rsp, %rbp
+mov    %rdi, 0x1234(%rbp)
+mov    %rdi,0xfffffffffffffff8(%rbp)
+mov    %rsi,0xfffffffffffffff0(%rbp)
+mov    %rax,0xffffffffffffffe8(%rbp)
+mov    0xfffffffffffffff0(%rbp),%rax
+mov    0xfffffffffffffff0(%rbp),%rcx
+mov    %rax,%rsi
+mov    $0x0,%rax
+mov    %rax,0xffffffffffffffc0(%rbp)
+mov    %rax,%rdi
