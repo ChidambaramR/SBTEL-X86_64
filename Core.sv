@@ -286,6 +286,12 @@ module Core (
         decode_2_byte_opcode = inst;
     endfunction
 
+    /*
+    * Function to print a 4 byte number byte by byte
+    */
+    function  void display_byte (logic[0 : 4*8-1] inp);
+        $write("%x %x %x %x", inp[3*8 : 4*8-1], inp[2*8 : 3*8-1], inp[1*8 : 2*8-1], inp[0*8 : 1*8-1]);
+    endfunction
     
     logic[0 : 3] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
@@ -406,7 +412,7 @@ module Core (
                          * The direction (source / destination is available in mod_rm_enc value")
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x       ", modRM_byte);
+                        $write("%x ", modRM_byte);
                         offset += 1;
    
                         /*
@@ -418,10 +424,14 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                $write("%x",short_disp_byte);
+                                $write("           ");
                                 offset += 1;
                             end 
                             else begin
-                                disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                disp_byte = decode_bytes[offset*8 +: 4*8];
+                                display_byte(disp_byte);
+                                $write("           ");
                                 offset += 4; // Assuming immediate values as 4. Correct?
                             end
                         end
@@ -431,6 +441,8 @@ module Core (
                          */
                         if (mod_rm_enc_byte == "MI ") begin
                             imm_byte = decode_bytes[offset*8 +: 4*8]; 
+                            display_byte(imm_byte);
+                            $write("           ");
                             offset += 4; // Assuming immediate values as 4. Correct?
                         end
                         else if(mod_rm_enc_byte == "MIS") begin
@@ -438,6 +450,8 @@ module Core (
                              * Immediate value is sign extended
                              */
                             short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
+                            $write("%x",imm_byte);
+                            $write("           ");
                             offset += 1;
                         end
 
