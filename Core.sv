@@ -34,19 +34,18 @@ module Core (
     
     /*
     Sample way to assign values
+    rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
     */
-    //rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
     
     logic [0:255][0:2][0:7] mod_rm_enc;
     logic [0:255][0:7][0:7] opcode_char;
     logic [0:15][0:3][0:7] reg_table_64;
-    logic [0:15][0:3][0:7] reg_table_32;
+    logic [0:7][0:3][0:7] reg_table_32;
     logic [0:7][0:7]str = {"       "};
     logic [0:8] i = 0;
     logic [0:63] prog_addr;
-    /*
-    * 2D Array
-    */
+
+    // 2D Array
     logic [0:23] opcode_enc[0:14][0:8] ;
     logic [0:255][0:0][0:3] opcode_group;
 
@@ -72,9 +71,9 @@ module Core (
         /*
          * Opcodes for AND
          */
+        opcode_char [33] = "AND     "; mod_rm_enc [33] = "MR "; // 21
+        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 81
         opcode_char[131] = "AND     "; mod_rm_enc[131] = "MIS"; // 83
-        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 83
-        opcode_char[33] = "AND     "; mod_rm_enc[33] = "MR "; // 83
     
         /*
          * Opcodes for MOV
@@ -82,6 +81,8 @@ module Core (
         opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
         opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
         opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
+        opcode_char[191] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
+        opcode_char[184] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
     
         /*
          * Opcodes for Instructions w/o REX Prefixes
@@ -99,18 +100,18 @@ module Core (
         /*
         * Opcodes for SUB
         */
-        opcode_char[41] = "SUB     "; mod_rm_enc[41] = "MR " ; // 29
+        opcode_char [41] = "SUB     "; mod_rm_enc [41] = "MR " ; // 29
 
         /*
         * Opcodes for CMP
         */
-        opcode_char[57] = "CMP     "; mod_rm_enc[57] = "MR "; // 39
-        opcode_char[61] = "CMP     "; mod_rm_enc[61] = "XXX"; 
+        opcode_char [57] = "CMP     "; mod_rm_enc [57] = "MR "; // 39
+        opcode_char [61] = "CMP     "; mod_rm_enc [61] = "XXX"; 
 
         /*
         * Opcode for ADD
         */
-        opcode_char[1] =  "ADD     "; mod_rm_enc[1]  = "MR "; // 1
+        opcode_char  [1] = "ADD     "; mod_rm_enc  [1]  = "MR "; // 1
         
         /*
         * Opcode for PUSH
@@ -159,16 +160,16 @@ module Core (
         opcode_group[131] = 1;
 
         /*
-         * Table for 64 bit registers. It taken from os dev wiki page, "Registers table"
+         * Table for 32/64 bit registers. It taken from os dev wiki page, "Registers table"
          */
-        reg_table_64[0] = "%rax";
-        reg_table_64[1] = "%rcx";
-        reg_table_64[2] = "%rdx";
-        reg_table_64[3] = "%rbx";
-        reg_table_64[4] = "%rsp";
-        reg_table_64[5] = "%rbp";
-        reg_table_64[6] = "%rsi";
-        reg_table_64[7] = "%rdi";
+        reg_table_64[0] = "%rax";  reg_table_32[0] = "%eax";
+        reg_table_64[1] = "%rcx";  reg_table_32[1] = "%ecx";
+        reg_table_64[2] = "%rdx";  reg_table_32[2] = "%edx";
+        reg_table_64[3] = "%rbx";  reg_table_32[3] = "%ebx";
+        reg_table_64[4] = "%rsp";  reg_table_32[4] = "%esp";
+        reg_table_64[5] = "%rbp";  reg_table_32[5] = "%ebp";
+        reg_table_64[6] = "%rsi";  reg_table_32[6] = "%esi";
+        reg_table_64[7] = "%rdi";  reg_table_32[7] = "%edi";
         reg_table_64[8] = "%r8";
         reg_table_64[9] = "%r9";
         reg_table_64[10] = "%r10";
@@ -178,26 +179,6 @@ module Core (
         reg_table_64[14] = "%r14";
         reg_table_64[15] = "%r15";
     
-        /*
-         * Table for 32 bit registers. It taken from os dev wiki page, "Registers table"
-         */
-        reg_table_32[0] = "%rax";
-        reg_table_32[1] = "%rcx";
-        reg_table_32[2] = "%rdx";
-        reg_table_32[3] = "%rbx";
-        reg_table_32[4] = "%rsp";
-        reg_table_32[5] = "%rbp";
-        reg_table_32[6] = "%rsi";
-        reg_table_32[7] = "%rdi";
-        reg_table_32[8] = "%r8";
-        reg_table_32[9] = "%r9";
-        reg_table_32[10] = "%r10";
-        reg_table_32[11] = "%r11";
-        reg_table_32[12] = "%r12";
-        reg_table_32[13] = "%r13";
-        reg_table_32[14] = "%r14";
-        reg_table_32[15] = "%r15";
-
     end 
     
     function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -292,6 +273,12 @@ module Core (
         decode_2_byte_opcode = inst;
     endfunction
 
+    /*
+    * Function to print a 4 byte number byte by byte
+    */
+    function  void display_byte (logic[0 : 4*8-1] inp);
+        $write("%x %x %x %x", inp[0*8 : 1*8-1], inp[1*8 : 2*8-1], inp[2*8 : 3*8-1], inp[3*8 : 4*8-1]);
+    endfunction
     
     logic[0 : 3] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
@@ -302,6 +289,8 @@ module Core (
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
     logic[0 : 3] rmByte;
+    logic[0 : 4*8-1] high_byte;
+    logic[0 : 4*8-1] low_byte;
 
     /*
     * Signed immediate and displacement variable declaration. try to re-use these variables
@@ -319,7 +308,7 @@ module Core (
 
     always_comb begin
         if (can_decode) begin : decode_block
-   
+            $display(""); 
             // Variables which are to be reset for each new decoding
             offset = 0;
             mod_rm_enc_byte = 0;
@@ -327,10 +316,12 @@ module Core (
             imm_byte = 0;
             short_disp_byte = 0;
             opcode_handled = 0;
+            high_byte = 0;
+            low_byte = 0;
    
             // Compute program address for next instruction
             prog_addr = fetch_rip - {58'b0, (fetch_offset - decode_offset)};
-            $write("\n%x:      ", prog_addr);
+            $write("%x:      ", prog_addr);
 
             /*
              * Prefix decoding
@@ -351,27 +342,44 @@ module Core (
                 opcode = decode_bytes[offset*8 +: 1*8];
                 offset += 1;
                 
-                /*
-                * Special case for PUSH/POP
-                */
-                if((opcode >= 80 && opcode <= 95)) begin
-                    /*
-                    * Refer to Table 3-1 of Intel Manual
-                    */
-                    $write("%h          %s",opcode, opcode_char[opcode]);
-                    if(opcode >= 88)
-                          opcode = opcode - 8;
-
-                    opcode = opcode - 80 + 8; 
-                    $write("    %s",reg_table_64[opcode]);
-                    opcode_handled = 1;
-                end
 
                 /* Check if next byte is in opcode table else jump to next instruction */ 
                 if (opcode_char[opcode] == str) begin
                     offset -= 1;
                 end 
                 else begin
+                    /*
+                    * ALL SPECIAL CASES GOES UPFRONT
+                    * Special case for PUSH/POP
+                    */
+                    if((opcode >= 80 && opcode <= 95)) begin
+                        /*
+                        * Refer to Table 3-1 of Intel Manual
+                        */
+                        $write("%h          %s",opcode, opcode_char[opcode]);
+                        if(opcode >= 88)
+                            opcode = opcode - 8;
+
+                        opcode = opcode - 80 + 8; 
+                        $write("    %s",reg_table_64[opcode]);
+                        opcode_handled = 1;
+                    end // End of Opcode for Special PUSH/POP block
+
+                    if((opcode >= 184) && (opcode <= 191)) begin
+                        /*
+                        * Refer to section 2.2.1.5 of the manual
+                        * If the opcode is between B8 to BF, then it is 64 bit operand
+                        */
+                        high_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+                        low_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+                        //$write("high byte = %x, low_byte = %x",byte_swap(high_byte), byte_swap(low_byte));
+                        $write("%x ",opcode);
+                        $write("         %s    $0x%h%h, %s",opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte), reg_table_64[opcode - 184]);
+                        opcode_handled = 1;
+                    end // End of Opcode for Special MOV block
+
                     /*
                     * Opcode handled is to short circuit the below loop. We have handled 
                     * the case above. We dont want to take the pain of parsing everything again
@@ -391,7 +399,7 @@ module Core (
                          * The direction (source / destination is available in mod_rm_enc value")
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x       ", modRM_byte);
+                        $write("%x ", modRM_byte);
                         offset += 1;
    
                         /*
@@ -403,10 +411,14 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                $write("%x", short_disp_byte);
+                                $write("           ");
                                 offset += 1;
-                            end
+                            end 
                             else begin
-                                disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                disp_byte = decode_bytes[offset*8 +: 4*8];
+                                display_byte(disp_byte);
+                                $write("           ");
                                 offset += 4; // Assuming immediate values as 4. Correct?
                             end
                         end
@@ -416,6 +428,8 @@ module Core (
                          */
                         if (mod_rm_enc_byte == "MI ") begin
                             imm_byte = decode_bytes[offset*8 +: 4*8]; 
+                            display_byte(imm_byte);
+                            $write("           ");
                             offset += 4; // Assuming immediate values as 4. Correct?
                         end
                         else if(mod_rm_enc_byte == "MIS") begin
@@ -423,6 +437,8 @@ module Core (
                              * Immediate value is sign extended
                              */
                             short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
+                            $write("%x", short_imm_byte);
+                            $write("           ");
                             offset += 1;
                         end
 
@@ -629,15 +645,18 @@ module Core (
                         $write("%s    *%s", opcode_char[opcode], reg_table_64[rmByte]);
                     end
                     else if (mod_rm_enc_byte == "D1 ") begin
-                        disp_byte = {24'b0, decode_bytes[offset*8 +: 1*8]};
+                        short_disp_byte = decode_bytes[offset*8 +: 1*8];
+                        $write("%x", short_disp_byte);
                         offset += 1;
                         
                         // Print Decoded Instruction
-                        $write("            ");
+                        disp_byte = {24'b0, short_disp_byte};
+                        $write("          ");
                         $write("%s    %x", opcode_char[opcode], disp_byte);
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
+                        display_byte(disp_byte);
                         offset += 4;
      
                         // Print Decoded Instruction
@@ -669,19 +688,22 @@ module Core (
                     opcode = decode_bytes[offset*8 +: 1*8];
                     $write("%x ", opcode);
                     offset += 1;
-                    
-                    // Print Decoded Instruction
-                    $write("         ");
-                    $write("%s", decode_2_byte_opcode(opcode));
 
                     // All the 2 byte Opcodes except "0F 05" have a 4 byte displacement
                     if (opcode != 5) begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
+                        display_byte(disp_byte);
                         offset += 4;
-     
+                    end
+                    
+                    // Print Decoded Instruction
+                    $write("         ");
+                    $write("%s", decode_2_byte_opcode(opcode));
+                    if (opcode != 5) begin
                         // TODO: Need to add address to disp_byte
                         $write("    %x", byte_swap(disp_byte));
                     end
+
                 end
             end
             bytes_decoded_this_cycle =+ offset;
