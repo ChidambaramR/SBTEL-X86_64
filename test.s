@@ -40,3 +40,14 @@ add    $0x2,%rax
 add    %rcx,%rax
 add    $0x8,%rcx
 add    $0x1023291, %rbx
+
+push   %rbp
+push   %rdi
+push   %r8
+push   %r12
+push   %r14
+
+pop    %rax
+pop    %rcx
+pop    %rdx
+pop    %r10

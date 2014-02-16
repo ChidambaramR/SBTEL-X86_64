@@ -105,6 +105,32 @@ module Core (
         * Opcode for ADD
         */
         opcode_char[1] =  "ADD     "; mod_rm_enc[1]  = "MR "; // 1
+        
+        /*
+        * Opcode for PUSH
+        */
+        opcode_char[80] = "PUSH    "; mod_rm_enc[80] = "O  ";
+        opcode_char[81] = "PUSH    "; mod_rm_enc[81] = "O  ";
+        opcode_char[82] = "PUSH    "; mod_rm_enc[82] = "O  ";
+        opcode_char[83] = "PUSH    "; mod_rm_enc[83] = "O  ";
+        opcode_char[84] = "PUSH    "; mod_rm_enc[84] = "O  ";
+        opcode_char[85] = "PUSH    "; mod_rm_enc[85] = "O  ";
+        opcode_char[86] = "PUSH    "; mod_rm_enc[86] = "O  ";
+        opcode_char[87] = "PUSH    "; mod_rm_enc[87] = "O  ";
+       
+
+        /*
+        * Opcode for POP
+        */
+        opcode_char[88] = "POP     "; mod_rm_enc[88] = "O  ";
+        opcode_char[89] = "POP     "; mod_rm_enc[89] = "O  ";
+        opcode_char[90] = "POP     "; mod_rm_enc[90] = "O  ";
+        opcode_char[91] = "POP     "; mod_rm_enc[91] = "O  ";
+        opcode_char[92] = "POP     "; mod_rm_enc[92] = "O  ";
+        opcode_char[93] = "POP     "; mod_rm_enc[93] = "O  ";
+        opcode_char[94] = "POP     "; mod_rm_enc[94] = "O  ";
+        opcode_char[95] = "POP     "; mod_rm_enc[95] = "O  ";
+
         /*
         * Shared OPCODE encoding. This block and the group block is taken from table
         * A6 in Appendix A of intel manual.
@@ -278,6 +304,7 @@ module Core (
     logic[0 : 7] short_imm_byte;
     logic[0 : 63] signed_disp_byte;
     logic[0 : 7] short_disp_byte;
+    logic[0 : 3] opcode_handled;
     
     rex rex_prefix;
     op_override op_ride;
@@ -294,6 +321,7 @@ module Core (
             imm_byte = 0;
             prog_addr = 8388832;
             short_disp_byte = 0;
+            opcode_handled = 0;
    
             $write("%x:      ", prog_addr);
             /*
@@ -313,13 +341,33 @@ module Core (
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
-
-                $write("%x ",opcode);
                 offset += 1;
-                if (opcode != 15) begin
+                
+                /*
+                * Special case for PUSH/POP
+                */
+                if((opcode >= 80 && opcode <= 95)) begin
+                    /*
+                    * Refer to Table 3-1 of Intel Manual
+                    */
+                    $write("%h          %s",opcode, opcode_char[opcode]);
+                    if(opcode >= 88)
+                          opcode = opcode - 8;
+
+                    opcode = opcode - 80 + 8; 
+                    $write("    %s",reg_table_64[opcode]);
+                    opcode_handled = 1;
+                end
+
+                /*
+                * Opcode handled is to short circuit the below loop. We have handled 
+                * the case above. We dont want to take the pain of parsing everything again
+                */
+                if (opcode != 15 && opcode_handled == 0) begin
                     /*
                      * Only the primary OPCODE
                      */
+                    $write("%x ",opcode);
                     mod_rm_enc_byte = mod_rm_enc[opcode];
 
                     assert(mod_rm_enc_byte != 0) else $fatal;
@@ -419,7 +467,7 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 32 bits
                                         */
-                                        $write("%s, $0x%x(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
                                     end
 
                                     else if(modRM_byte.mod == 1) begin
@@ -427,7 +475,7 @@ module Core (
                                         * The displacement value is SIGN extended
                                         */
                                         signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                        $write("%s, $0x%x(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
+                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
                                     end
                                 end
 
@@ -460,7 +508,7 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 32 bits
                                         */
-                                        $write("$0x%x(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
+                                        $write("$0x%h(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
                                     end
     
                                     else if(modRM_byte.mod == 1) begin
@@ -468,7 +516,7 @@ module Core (
                                         * The displacement value is sign extended
                                         */
                                         signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                        $write("$0x%x(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
+                                        $write("$0x%h(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
                                     end
                                 end
                             end
@@ -479,7 +527,7 @@ module Core (
                              * Immediate addressing mode
                              */
                             //if (imm_byte != 0) begin
-                                $write("$0x%x, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
+                                $write("$0x%h, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
                             //end else begin
                             //    $write("%s",reg_table_64[rmByte]);
                             //end 
@@ -499,7 +547,7 @@ module Core (
                             * Right now handling only 1 byte immediate to sign extension
                             */
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                            $write("$0x%x, %s",signed_imm_byte,reg_table_64[rmByte]);
+                            $write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
                         end
 
                     end // END OF REW.W bit check
@@ -562,6 +610,22 @@ module Core (
                         // TODO: Need to add address to disp_byte
                         $write("            ");
                         $write("%s    %x", opcode_char[opcode], byte_swap(disp_byte));
+                    end
+                    else if (mod_rm_enc_byte == "O  ") begin
+                        /*
+                        * Should work for PUSH/POP
+                        * Subtract 50 from the OPCODE. Check Table 3-1 in Intel manual.
+                        * 50 - Push RAX
+                        * 51 - Push RCX and so on.
+                        * So if we subtract 50 from 51, ans is 1. Now I will index this into 
+                        * reg_64_table. reg_table_64[1] = RCX
+                        */
+                        $write("            %s",opcode_char[opcode]);
+                        if(opcode >= 88)
+                              opcode = opcode - 8;
+
+                        opcode = opcode - 80;
+                        $write("    %s",reg_table_64[opcode]);
                     end
                 end
                 else begin
