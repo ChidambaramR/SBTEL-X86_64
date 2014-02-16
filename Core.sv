@@ -38,12 +38,12 @@ module Core (
     //rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
     
     logic [0:255][0:2][0:7] mod_rm_enc;
-    logic [255:0][7:0][7:0] opcode_char;
+    logic [0:255][0:7][0:7] opcode_char;
     logic [0:15][0:3][0:7] reg_table_64;
     logic [0:15][0:3][0:7] reg_table_32;
-    logic [7:0][7:0]str = {"       "};
-    logic [8:0] i = 0;
-    logic [0 : 4*8-1] prog_addr = 08388832;
+    logic [0:7][0:7]str = {"       "};
+    logic [0:8] i = 0;
+    logic [0:63] prog_addr;
     /*
     * 2D Array
     */
@@ -321,17 +321,17 @@ module Core (
         if (can_decode) begin : decode_block
    
             // Variables which are to be reset for each new decoding
-            $display(" ");
             offset = 0;
             mod_rm_enc_byte = 0;
             disp_byte = 0;
             imm_byte = 0;
-            prog_addr = 8388832;
-            //next_instruction = 1;        
             short_disp_byte = 0;
             opcode_handled = 0;
    
-            $write("%x:      ", prog_addr);
+            // Compute program address for next instruction
+            prog_addr = fetch_rip - {58'b0, (fetch_offset - decode_offset)};
+            $write("\n%x:      ", prog_addr);
+
             /*
              * Prefix decoding
              */
@@ -570,7 +570,7 @@ module Core (
 
                 end else begin
                     /*
-                     * Currently 2 byte Opcode Insttuction doesnt have a REX Prefix
+                     * Currently 2 byte Opcode Instructions dont have a REX Prefix
                      */
                     assert(0) else $fatal;
                 end
