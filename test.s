@@ -26,3 +26,17 @@ sub    %rcx,%rax
 sub    $0x1,%rax
 sub    $0x50,%rsp
 sub    $0x10,%rsp
+
+cmp    $0x0,%rax
+cmp    %rcx,%rax
+cmp    $0x1,%rax
+cmp    $0x2,%rax
+#cmp    $0xf2,%rax
+
+add    $0x1,%rax
+add    $0xfffffffffffffff9, %rsp
+add    $0xf9, %rsp
+add    $0x2,%rax
+add    %rcx,%rax
+add    $0x8,%rcx
+add    $0x1023291, %rbx
