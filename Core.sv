@@ -99,8 +99,18 @@ module Core (
         /*
         * Opcodes for SUB
         */
-        opcode_char[41] = "SUB      "; mod_rm_enc[41] = "MR " ; // 29
+        opcode_char[41] = "SUB     "; mod_rm_enc[41] = "MR " ; // 29
 
+        /*
+        * Opcodes for CMP
+        */
+        opcode_char[57] = "CMP     "; mod_rm_enc[57] = "MR "; // 39
+        opcode_char[61] = "CMP     "; mod_rm_enc[61] = "XXX"; 
+
+        /*
+        * Opcode for ADD
+        */
+        opcode_char[1] =  "ADD     "; mod_rm_enc[1]  = "MR "; // 1
         /*
         * Shared OPCODE encoding. This block and the group block is taken from table
         * A6 in Appendix A of intel manual.
@@ -112,7 +122,7 @@ module Core (
         opcode_enc[1][4] = "AND";
         opcode_enc[1][5] = "SUB";
         opcode_enc[1][6] = "XOR";
-        opcode_enc[1][7] = "SUB";
+        opcode_enc[1][7] = "CMP";
 
         /*
         * Group of Shared opcode
