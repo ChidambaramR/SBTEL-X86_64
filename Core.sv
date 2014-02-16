@@ -89,6 +89,12 @@ module Core (
         opcode_char[114] = "JB      "; mod_rm_enc[114] = "D1 "; // 72
         opcode_char[232] = "CALLQ   "; mod_rm_enc[232] = "D4 "; // E8
         opcode_char[255] = "CALLQ   "; mod_rm_enc[255] = "M  "; // FF 
+        
+        /*
+         * Opcodes for Instructions w/o REX Prefixes and w/o MOD RM
+         */
+        opcode_char[108] = "INSB    "; // 6C
+        opcode_char[111] = "OUTSL   "; // 6F
 
         /*
         * Opcodes for SUB
@@ -302,6 +308,7 @@ module Core (
     */
     logic[0 : 63] signed_imm_byte;
     logic[0 : 7] short_imm_byte;
+    //logic next_instruction;
     logic[0 : 63] signed_disp_byte;
     logic[0 : 7] short_disp_byte;
     logic[0 : 3] opcode_handled;
@@ -320,6 +327,7 @@ module Core (
             disp_byte = 0;
             imm_byte = 0;
             prog_addr = 8388832;
+            //next_instruction = 1;        
             short_disp_byte = 0;
             opcode_handled = 0;
    
@@ -359,11 +367,16 @@ module Core (
                     opcode_handled = 1;
                 end
 
-                /*
-                * Opcode handled is to short circuit the below loop. We have handled 
-                * the case above. We dont want to take the pain of parsing everything again
-                */
-                if (opcode != 15 && opcode_handled == 0) begin
+                /* Check if next byte is in opcode table else jump to next instruction */ 
+                if (opcode_char[opcode] == str) begin
+                    offset -= 1;
+                end 
+                else begin
+                    /*
+                    * Opcode handled is to short circuit the below loop. We have handled 
+                    * the case above. We dont want to take the pain of parsing everything again
+                    */
+                    if (opcode != 15 && opcode_handled == 0) begin
                     /*
                      * Only the primary OPCODE
                      */
@@ -561,12 +574,21 @@ module Core (
                      */
                     assert(0) else $fatal;
                 end
+                end
 
                 //$display("1st nibble = %x",rex_prefix.def);
             end else if (temp_prefix == 102) begin
                 op_ride = temp_prefix[0 : 7];
                 $display("Operand override = %x",op_ride);
                 offset += 1;
+            
+            end else if (temp_prefix == 101) begin
+                /* GS Segment Override Prefix */
+                offset += 1;
+                $write("%x", opcode);
+                $write("            ");
+                $write(" GS");
+
             end else begin
                 /*
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
@@ -575,7 +597,19 @@ module Core (
                 $write("%x ", opcode);
                 offset += 1;
 
-                if (opcode != 15) begin
+                if (opcode == 108) begin
+                    /* INSB instruction . No Prefix, No Mod RM */
+                    opcode = decode_bytes[0 : 7];
+                    $write("            ");
+                    $write("%s    (%%dx), %%es:(%%rdi)",opcode_char[opcode]);
+            
+                end else if (opcode == 111) begin
+                    /* OUTSB instruction . No Prefix, No Mod RM */
+                    opcode = decode_bytes[0 : 7];
+                    $write("            ");
+                    $write("%s     %%ds:(%%rsi), %%dx)",opcode_char[opcode]);
+                
+                end else if (opcode != 15) begin
                     
                     mod_rm_enc_byte = mod_rm_enc[opcode];
                     assert(mod_rm_enc_byte != 0) else $fatal;
@@ -650,7 +684,6 @@ module Core (
                     end
                 end
             end
-    
             bytes_decoded_this_cycle =+ offset;
     
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
