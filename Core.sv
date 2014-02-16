@@ -40,7 +40,7 @@ module Core (
     logic [0:255][0:2][0:7] mod_rm_enc;
     logic [255:0][7:0][7:0] opcode_char;
     logic [0:15][0:3][0:7] reg_table_64;
-    logic [0:15][0:3][0:7] reg_table_32;
+    logic [0:7][0:3][0:7] reg_table_32;
     logic [7:0][7:0]str = {"       "};
     logic [8:0] i = 0;
     logic [0 : 4*8-1] prog_addr = 08388832;
@@ -82,6 +82,8 @@ module Core (
         opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
         opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
         opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
+        opcode_char[191] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
+        opcode_char[184] = "MOV     "; mod_rm_enc[199] = "MI "; // c7
     
         /*
          * Opcodes for Instructions w/o REX Prefixes
@@ -181,22 +183,14 @@ module Core (
         /*
          * Table for 32 bit registers. It taken from os dev wiki page, "Registers table"
          */
-        reg_table_32[0] = "%rax";
-        reg_table_32[1] = "%rcx";
-        reg_table_32[2] = "%rdx";
-        reg_table_32[3] = "%rbx";
-        reg_table_32[4] = "%rsp";
-        reg_table_32[5] = "%rbp";
-        reg_table_32[6] = "%rsi";
-        reg_table_32[7] = "%rdi";
-        reg_table_32[8] = "%r8";
-        reg_table_32[9] = "%r9";
-        reg_table_32[10] = "%r10";
-        reg_table_32[11] = "%r11";
-        reg_table_32[12] = "%r12";
-        reg_table_32[13] = "%r13";
-        reg_table_32[14] = "%r14";
-        reg_table_32[15] = "%r15";
+        reg_table_32[0] = "%eax";
+        reg_table_32[1] = "%ecx";
+        reg_table_32[2] = "%edx";
+        reg_table_32[3] = "%ebx";
+        reg_table_32[4] = "%esp";
+        reg_table_32[5] = "%ebp";
+        reg_table_32[6] = "%esi";
+        reg_table_32[7] = "%edi";
 
     end 
     
@@ -302,6 +296,8 @@ module Core (
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
     logic[0 : 3] rmByte;
+    logic[0 : 4*8-1] high_byte;
+    logic[0 : 4*8-1] low_byte;
 
     /*
     * Signed immediate and displacement variable declaration. try to re-use these variables
@@ -330,6 +326,8 @@ module Core (
             //next_instruction = 1;        
             short_disp_byte = 0;
             opcode_handled = 0;
+            high_byte = 0;
+            low_byte = 0;
    
             $write("%x:      ", prog_addr);
             /*
@@ -351,27 +349,44 @@ module Core (
                 opcode = decode_bytes[offset*8 +: 1*8];
                 offset += 1;
                 
-                /*
-                * Special case for PUSH/POP
-                */
-                if((opcode >= 80 && opcode <= 95)) begin
-                    /*
-                    * Refer to Table 3-1 of Intel Manual
-                    */
-                    $write("%h          %s",opcode, opcode_char[opcode]);
-                    if(opcode >= 88)
-                          opcode = opcode - 8;
-
-                    opcode = opcode - 80 + 8; 
-                    $write("    %s",reg_table_64[opcode]);
-                    opcode_handled = 1;
-                end
 
                 /* Check if next byte is in opcode table else jump to next instruction */ 
                 if (opcode_char[opcode] == str) begin
                     offset -= 1;
                 end 
                 else begin
+                    /*
+                    * ALL SPECIAL CASES GOES UPFRONT
+                    * Special case for PUSH/POP
+                    */
+                    if((opcode >= 80 && opcode <= 95)) begin
+                        /*
+                        * Refer to Table 3-1 of Intel Manual
+                        */
+                        $write("%h          %s",opcode, opcode_char[opcode]);
+                        if(opcode >= 88)
+                            opcode = opcode - 8;
+
+                        opcode = opcode - 80 + 8; 
+                        $write("    %s",reg_table_64[opcode]);
+                        opcode_handled = 1;
+                    end // End of Opcode for Special PUSH/POP block
+
+                    if((opcode >= 184) && (opcode <= 191)) begin
+                        /*
+                        * Refer to section 2.2.1.5 of the manual
+                        * If the opcode is between B8 to BF, then it is 64 bit operand
+                        */
+                        high_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+                        low_byte = decode_bytes[offset*8 +: 4*8];
+                        offset += 4;
+                        //$write("high byte = %x, low_byte = %x",byte_swap(high_byte), byte_swap(low_byte));
+                        $write("%x ",opcode);
+                        $write("         %s    $0x%h%h, %s",opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte), reg_table_64[opcode - 184]);
+                        opcode_handled = 1;
+                    end // End of Opcode for Special MOV block
+
                     /*
                     * Opcode handled is to short circuit the below loop. We have handled 
                     * the case above. We dont want to take the pain of parsing everything again
@@ -404,7 +419,7 @@ module Core (
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
                                 offset += 1;
-                            end
+                            end 
                             else begin
                                 disp_byte = decode_bytes[offset*8 +: 4*8]; 
                                 offset += 4; // Assuming immediate values as 4. Correct?
