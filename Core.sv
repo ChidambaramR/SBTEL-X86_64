@@ -696,47 +696,45 @@ module Core (
                         $write("       ");
                         $write("%s    ",opcode_char[opcode]);
                         
-                            if (disp_byte != 0 || short_disp_byte != 0)
+                        if (disp_byte != 0 || short_disp_byte != 0)
+                            /*
+                             * There is displacement
+                             */
+                            if (modRM_byte.mod == 0) begin
                                 /*
-                                 * There is displacement
+                                 * There is no immediate value for 
+                                 * that displacement, then the mod bits of the modRM byte
+                                 * will be 0
                                  */
-                                if (modRM_byte.mod == 0) begin
-                                    /*
-                                     * There is no immediate value for 
-                                     * that displacement, then the mod bits of the modRM byte
-                                     * will be 0
-                                     */
-                                    $write("%s, %%:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
-                                end
-                                else begin
-                                    /*
-                                     * There is some displacement value
-                                     */
-                                    if(modRM_byte.mod == 2) begin
-                                        /*
-                                        * It is NOT sign extended. The displacement value is 8 bits
-                                        */
-                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
-                                    end
-
-                                    else if(modRM_byte.mod == 1) begin
-                                        /*
-                                        * The displacement value is SIGN extended
-                                        */
-                                        signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
-                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], (signed_disp_byte), reg_table_64[rmByte]);
-                                    end
-                                end
-
+                                $write("%s, %%:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                            end
                             else begin
                                 /*
-                                 * There is no displacement
+                                 * There is some displacement value
                                  */
-                                $write("%s, %%fs:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
-                            end
-                        end
+                                if(modRM_byte.mod == 2) begin
+                                    /*
+                                    * It is NOT sign extended. The displacement value is 8 bits
+                                    */
+                                    $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                end
 
-                                        
+                                else if(modRM_byte.mod == 1) begin
+                                    /*
+                                    * The displacement value is SIGN extended
+                                    */
+                                    signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
+                                    $write("%s, $0x%h(%s)",reg_table_64[regByte], (signed_disp_byte), reg_table_64[rmByte]);
+                                end
+                            end
+
+                        else begin
+                            /*
+                             * There is no displacement
+                             */
+                            $write("%s, %%fs:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                        end
+                    end
                 end
 
             end else begin
@@ -789,7 +787,6 @@ module Core (
                         // Print Decoded Instruction
                         disp_byte = {24'b0, short_disp_byte};
                         //$write("     ");
-                        $write("%s    $0x%x", opcode_char[opcode], disp_byte);
                         $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, disp_byte, offset));
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
