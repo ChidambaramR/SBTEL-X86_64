@@ -354,14 +354,15 @@ module Core (
              */
             if (temp_prefix >= 64 && temp_prefix <= 79) begin
                 rex_prefix = temp_prefix[0 : 7];
-                offset += 1;
                 space_buffer[(offset)*8 +: 8] = (rex_prefix);
-                $write("%x ", rex_prefix);
+                offset += 1;
+                //$write("%x ", rex_prefix);
    
                 /*
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
                 
 
@@ -385,8 +386,8 @@ module Core (
                          * Special case for PUSH/POP
                          * Refer to Table 3-1 of Intel Manual
                          */
-                        space_buffer[(offset)*8 +: 8] = opcode;
-                        $write("%h          %s",opcode, opcode_char[opcode]);
+                        //$write("%h          %s",opcode, opcode_char[opcode]);
+                        $write("%s",opcode_char[opcode]);
                         if (opcode >= 88)
                             opcode = opcode - 8;
 
@@ -402,11 +403,12 @@ module Core (
                          */
                         high_byte = decode_bytes[offset*8 +: 4*8];
                         offset += 4;
+                        space_buffer[(offset)*8 +: 4*8] = byte_swap(high_byte);
                         low_byte = decode_bytes[offset*8 +: 4*8];
                         offset += 4;
+                        space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
                         //$write("\nhigh byte = %x, low_byte = %x\n",byte_swap(high_byte), byte_swap(low_byte));
-                        $write("%x ",opcode);
-                        space_buffer[(offset)*8 +: 8] = opcode;
+                        //$write("%x ",opcode);
                         $write("         %s    $0x%h%h, %s", opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte),
                                                             reg_table_64[opcode - 184]);
                     end // End of Opcode for Special MOV block
@@ -415,8 +417,7 @@ module Core (
                         /*
                          * General Handling of 1 byte Opcode Instructions
                          */
-                        $write("%x ",opcode);
-                        space_buffer[(offset)*8 +: 8] = opcode;
+                        //$write("%x ",opcode);
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
                         assert(mod_rm_enc_byte != 0) else $fatal;
@@ -427,9 +428,9 @@ module Core (
                              * The direction (source / destination is available in mod_rm_enc value")
                              */
                             modRM_byte = decode_bytes[offset*8 +: 1*8];
-                            $write("%x ", modRM_byte);
-                            offset += 1;
                             space_buffer[(offset)*8 +: 8] = modRM_byte;
+                            //$write("%x ", modRM_byte);
+                            offset += 1;
        
                             /*
                              * Check if there is a displacement in the instruction
@@ -440,17 +441,17 @@ module Core (
                             if (modRM_byte.mod != 3) begin
                                 if (modRM_byte.mod == 1) begin
                                     short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                    $write("%x", short_disp_byte);
-                                    $write("           ");
-                                    offset += 1;
                                     space_buffer[(offset)*8 +: 8] = short_disp_byte;
+                                    //$write("%x", short_disp_byte);
+                                    //$write("           ");
+                                    offset += 1;
                                 end 
                                 else begin
                                     disp_byte = decode_bytes[offset*8 +: 4*8];
-                                    display_byte(disp_byte);
-                                    $write("           ");
-                                    offset += 4; // Assuming immediate values as 4. Correct?
                                     space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                                    //display_byte(disp_byte);
+                                    //$write("           ");
+                                    offset += 4; // Assuming immediate values as 4. Correct?
                                 end
                             end
 
@@ -459,20 +460,20 @@ module Core (
                              */
                             if (mod_rm_enc_byte == "MI ") begin
                                 imm_byte = decode_bytes[offset*8 +: 4*8]; 
-                                display_byte(imm_byte);
-                                $write("           ");
-                                offset += 4; // Assuming immediate values as 4. Correct?
                                 space_buffer[(offset)*8 +: 4*8] = imm_byte;
+                                //display_byte(imm_byte);
+                                //$write("           ");
+                                offset += 4; // Assuming immediate values as 4. Correct?
                             end
                             else if (mod_rm_enc_byte == "MIS") begin
                                 /*
                                  * Immediate value is sign extended
                                  */
                                 short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
-                                $write("%x", short_imm_byte);
-                                $write("           ");
-                                offset += 1;
                                 space_buffer[(offset)*8 +: 8] = short_imm_byte;
+                                //$write("%x", short_imm_byte);
+                                //$write("           ");
+                                offset += 1;
                             end
 
                         end
@@ -625,19 +626,22 @@ module Core (
             
             end else if (temp_prefix == 101) begin
                 /* GS Segment Override Prefix */
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                $write("%x", opcode);
-                $write("            ");
+                //$write("%x", opcode);
+                //$write("            ");
                 $write(" GS");
 
             end else if (temp_prefix == 100) begin
                 /* FS Segment Override Prefix */
                 rex_prefix = temp_prefix[0 : 7];
+                space_buffer[(offset)*8 +: 8] = rex_prefix;
                 offset += 1;
-                $write("%x ", rex_prefix);
+                //$write("%x ", rex_prefix);
                 opcode = decode_bytes[offset*8 +: 1*8]; 
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                $write("%x", opcode);
+                //$write("%x", opcode);
                 if (opcode != 15) begin
                     mod_rm_enc_byte = mod_rm_enc[opcode];
                     assert(mod_rm_enc_byte != 0) else $fatal;
@@ -647,7 +651,8 @@ module Core (
                          * Register addressing mode
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write(" %x", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
+                        //$write(" %x", modRM_byte);
                         offset += 1;
 
                         /*
@@ -676,12 +681,14 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                $write(" %x", short_disp_byte);
+                                space_buffer[(offset)*8 +: 8] = short_disp_byte;
+                                //$write(" %x", short_disp_byte);
                                 offset += 1;
                             end
                             else begin
                                 /* TODO : Need to handle printing 4 bytes */
                                 disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                space_buffer[(offset)*8 +: 4*8] = disp_byte;
                                 offset += 4; // Assuming immediate values as 4. Correct?
                             end
                         end
@@ -737,19 +744,20 @@ module Core (
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
                  */
                 opcode = decode_bytes[0 : 7];
-                $write("%x ", opcode);
+                space_buffer[(offset)*8 +: 8] = opcode;
+                //$write("%x ", opcode);
                 offset += 1;
 
                 if (opcode == 108) begin
                     /* INSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    $write("            ");
+                    //$write("            ");
                     $write("%s    (%%dx), %%es:(%%rdi)",opcode_char[opcode]);
             
                 end else if (opcode == 111) begin
                     /* OUTSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    $write("            ");
+                    //$write("            ");
                     $write("%s     %%ds:(%%rsi), %%dx)",opcode_char[opcode]);
                 
                 end else if (opcode != 15) begin
@@ -760,7 +768,8 @@ module Core (
                     if (mod_rm_enc_byte == "M  ") begin
 
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x          ", modRM_byte);
+                        //$write("%x          ", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
 
                         // reg bits need to be 2
@@ -773,18 +782,20 @@ module Core (
                     end
                     else if (mod_rm_enc_byte == "D1 ") begin
                         short_disp_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x", short_disp_byte);
+                        //$write("%x", short_disp_byte);
+                        space_buffer[(offset)*8 +: 8] = short_disp_byte;
                         offset += 1;
                         
                         // Print Decoded Instruction
                         disp_byte = {24'b0, short_disp_byte};
-                        $write("     ");
+                        //$write("     ");
                         $write("%s    $0x%x", opcode_char[opcode], disp_byte);
                         $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, disp_byte, offset));
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
-                        display_byte(disp_byte);
+                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                        //display_byte(disp_byte);
                         offset += 4;
      
                         // Print Decoded Instruction
@@ -804,7 +815,8 @@ module Core (
                          * Register addressing mode
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x", modRM_byte);
+                        //$write("%x", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
 
                         /*
@@ -833,7 +845,8 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                $write(" %x", short_disp_byte);
+                                //$write(" %x", short_disp_byte);
+                                space_buffer[(offset)*8 +: 8] = short_disp_byte;
                                 offset += 1;
                             end
                             else begin
@@ -1012,22 +1025,24 @@ module Core (
                      * Two byte Opcode
                      */
                     opcode = decode_bytes[offset*8 +: 1*8];
-                    $write("%x ", opcode);
+                    space_buffer[(offset)*8 +: 8] = opcode;
+                    //$write("%x ", opcode);
                     offset += 1;
 
                     // All the 2 byte Opcodes except "0F 05" have a 4 byte displacement
                     if (opcode == 5) begin
                         // Print Decoded Instruction
-                        $write("         ");
+                        //$write("         ");
                         $write("%s", decode_2_byte_opcode(opcode));
                     end
                     else begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
-                        display_byte(disp_byte);
+                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                        //display_byte(disp_byte);
                         offset += 4;
 
                         // Print Decoded Instruction
-                        $write("     ");
+                        //$write("     ");
                         $write("%s    $0x%x", decode_2_byte_opcode(opcode), rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
                         
                     end
@@ -1035,7 +1050,7 @@ module Core (
                 end
             end
             bytes_decoded_this_cycle =+ offset;
-            $write("buffer: %x hello",space_buffer);
+            $write(" %x",space_buffer);
 
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
