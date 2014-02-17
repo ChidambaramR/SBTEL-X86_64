@@ -50,8 +50,14 @@ module Core (
     logic [0:23] opcode_enc[0:14][0:8] ;
     logic [0:255][0:0][0:3] opcode_group;
 
+    logic [0:20*8-1] space_buffer;
+
     initial 
     begin
+        for (i = 0; i < 20 ; i++) begin
+            space_buffer[i*8 +: 8] = 254;
+        end
+
         for (i = 0; i < 256; i++)
         begin
             opcode_char[i] = str;
@@ -329,6 +335,9 @@ module Core (
             short_disp_byte = 0;
             high_byte = 0;
             low_byte = 0;
+            for (i = 0; i < 20 ; i++) begin
+                space_buffer[i*8 +: 8] = 254;
+            end
    
             // Compute program address for next instruction
             prog_addr = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
@@ -338,6 +347,7 @@ module Core (
              * Prefix decoding
              */
             temp_prefix = decode_bytes[offset*8 +: 1*8];
+
             /*
              * If the byte is between 0x40 and 0x4F, then it is REX prefix
              * Below is the decimal equivalent check
@@ -345,6 +355,7 @@ module Core (
             if (temp_prefix >= 64 && temp_prefix <= 79) begin
                 rex_prefix = temp_prefix[0 : 7];
                 offset += 1;
+                space_buffer[(offset)*8 +: 8] = (rex_prefix);
                 $write("%x ", rex_prefix);
    
                 /*
@@ -374,6 +385,7 @@ module Core (
                          * Special case for PUSH/POP
                          * Refer to Table 3-1 of Intel Manual
                          */
+                        space_buffer[(offset)*8 +: 8] = opcode;
                         $write("%h          %s",opcode, opcode_char[opcode]);
                         if (opcode >= 88)
                             opcode = opcode - 8;
@@ -394,6 +406,7 @@ module Core (
                         offset += 4;
                         //$write("\nhigh byte = %x, low_byte = %x\n",byte_swap(high_byte), byte_swap(low_byte));
                         $write("%x ",opcode);
+                        space_buffer[(offset)*8 +: 8] = opcode;
                         $write("         %s    $0x%h%h, %s", opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte),
                                                             reg_table_64[opcode - 184]);
                     end // End of Opcode for Special MOV block
@@ -403,6 +416,7 @@ module Core (
                          * General Handling of 1 byte Opcode Instructions
                          */
                         $write("%x ",opcode);
+                        space_buffer[(offset)*8 +: 8] = opcode;
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
                         assert(mod_rm_enc_byte != 0) else $fatal;
@@ -415,6 +429,7 @@ module Core (
                             modRM_byte = decode_bytes[offset*8 +: 1*8];
                             $write("%x ", modRM_byte);
                             offset += 1;
+                            space_buffer[(offset)*8 +: 8] = modRM_byte;
        
                             /*
                              * Check if there is a displacement in the instruction
@@ -428,12 +443,14 @@ module Core (
                                     $write("%x", short_disp_byte);
                                     $write("           ");
                                     offset += 1;
+                                    space_buffer[(offset)*8 +: 8] = short_disp_byte;
                                 end 
                                 else begin
                                     disp_byte = decode_bytes[offset*8 +: 4*8];
                                     display_byte(disp_byte);
                                     $write("           ");
                                     offset += 4; // Assuming immediate values as 4. Correct?
+                                    space_buffer[(offset)*8 +: 4*8] = disp_byte;
                                 end
                             end
 
@@ -445,6 +462,7 @@ module Core (
                                 display_byte(imm_byte);
                                 $write("           ");
                                 offset += 4; // Assuming immediate values as 4. Correct?
+                                space_buffer[(offset)*8 +: 4*8] = imm_byte;
                             end
                             else if (mod_rm_enc_byte == "MIS") begin
                                 /*
@@ -454,6 +472,7 @@ module Core (
                                 $write("%x", short_imm_byte);
                                 $write("           ");
                                 offset += 1;
+                                space_buffer[(offset)*8 +: 8] = short_imm_byte;
                             end
 
                         end
@@ -698,7 +717,7 @@ module Core (
                                         * The displacement value is SIGN extended
                                         */
                                         signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
-                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(signed_disp_byte), reg_table_64[rmByte]);
+                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], (signed_disp_byte), reg_table_64[rmByte]);
                                     end
                                 end
 
@@ -1016,7 +1035,8 @@ module Core (
                 end
             end
             bytes_decoded_this_cycle =+ offset;
-    
+            $write("buffer: %x hello",space_buffer);
+
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
         end else begin
