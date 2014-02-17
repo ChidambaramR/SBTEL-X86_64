@@ -51,12 +51,14 @@ module Core (
     logic [0:255][0:0][0:3] opcode_group;
 
     logic [0:20*8-1] space_buffer;
+    logic [0:15][0:7] instr_buffer;
 
     initial 
     begin
         for (i = 0; i < 20 ; i++) begin
             space_buffer[i*8 +: 8] = 254;
         end
+        
 
         for (i = 0; i < 256; i++)
         begin
@@ -299,6 +301,19 @@ module Core (
         rel_to_abs_addr = abs_addr;
     endfunction
 
+    function print_buffer(logic[0 : 20*8-1] prog_counter);
+        logic[0 : 7] offset = 0;
+        logic[0 : 7] per_byte;
+        for(offset = 0; offset < 20; offset++)
+            begin
+                per_byte = prog_counter[offset*8 +: 1*8];
+                $write(" ");
+                if (per_byte != 254)
+                    $write("%x",per_byte);
+            end
+    endfunction
+
+    
     logic[0 : 3] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
     logic[0 : 3] offset;
@@ -387,6 +402,7 @@ module Core (
                          */
                         space_buffer[(offset)*8 +: 8] = opcode;
                         $write("%h          %s",opcode, opcode_char[opcode]);
+                        instr_buffer = opcode_char[opcode];
                         if (opcode >= 88)
                             opcode = opcode - 8;
 
@@ -409,6 +425,7 @@ module Core (
                         space_buffer[(offset)*8 +: 8] = opcode;
                         $write("         %s    $0x%h%h, %s", opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte),
                                                             reg_table_64[opcode - 184]);
+                        instr_buffer = opcode_char[opcode]; 
                     end // End of Opcode for Special MOV block
 
                     else begin 
@@ -498,6 +515,7 @@ module Core (
                         end
                         else begin
                             $write("%s    ",opcode_char[opcode]);
+                            instr_buffer = opcode_char[opcode];
                         end
 
                         if (rex_prefix.W) begin
@@ -688,6 +706,8 @@ module Core (
                         
                         $write("       ");
                         $write("%s    ",opcode_char[opcode]);
+                        instr_buffer = opcode_char[opcode];
+
                         
                             if (disp_byte != 0 || short_disp_byte != 0)
                                 /*
@@ -745,12 +765,14 @@ module Core (
                     opcode = decode_bytes[0 : 7];
                     $write("            ");
                     $write("%s    (%%dx), %%es:(%%rdi)",opcode_char[opcode]);
+                    instr_buffer = opcode_char[opcode];
             
                 end else if (opcode == 111) begin
                     /* OUTSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
                     $write("            ");
                     $write("%s     %%ds:(%%rsi), %%dx)",opcode_char[opcode]);
+                    instr_buffer = opcode_char[opcode];
                 
                 end else if (opcode != 15) begin
                     
@@ -770,6 +792,7 @@ module Core (
 
                         // Print Decoded Instruction
                         $write("%s    *%s", opcode_char[opcode], reg_table_64[rmByte]);
+                        instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D1 ") begin
                         short_disp_byte = decode_bytes[offset*8 +: 1*8];
@@ -779,8 +802,10 @@ module Core (
                         // Print Decoded Instruction
                         disp_byte = {24'b0, short_disp_byte};
                         $write("     ");
-                        $write("%s    $0x%x", opcode_char[opcode], disp_byte);
+                        /* TODO: Printing JB twice */
+                        //$write("%s    $0x%x", opcode_char[opcode], disp_byte);
                         $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, disp_byte, offset));
+                        instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
@@ -790,6 +815,7 @@ module Core (
                         // Print Decoded Instruction
                         $write("        ");
                         $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
+                        instr_buffer = opcode_char[opcode];
                     end
 
 
@@ -845,6 +871,7 @@ module Core (
                         
                         $write("       ");
                         $write("%s    ",opcode_char[opcode]);
+                        instr_buffer = opcode_char[opcode];
                         
                             if (disp_byte != 0 || short_disp_byte != 0)
                                 /*
@@ -932,6 +959,7 @@ module Core (
                         
                         $write("      ");
                         $write("%s    ",opcode_char[opcode]);
+                        instr_buffer = opcode_char[opcode];
                             
                             if (disp_byte != 0 || short_disp_byte != 0) begin
                             /*
@@ -1000,6 +1028,7 @@ module Core (
                         * reg_64_table. reg_table_64[1] = RCX
                         */
                         $write("            %s", opcode_char[opcode]);
+                        instr_buffer = opcode_char[opcode];
                         if (opcode >= 88)
                               opcode = opcode - 8;
 
@@ -1035,8 +1064,11 @@ module Core (
                 end
             end
             bytes_decoded_this_cycle =+ offset;
-            $write("buffer: %x hello",space_buffer);
-
+            //$write("buffer: %x hello",space_buffer);
+            //$write("buffer function : \t");
+            print_buffer(space_buffer);
+            $write("%s",instr_buffer);
+            instr_buffer = str;
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
         end else begin
