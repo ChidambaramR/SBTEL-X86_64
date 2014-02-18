@@ -44,7 +44,8 @@ module Core (
     logic [0:7][0:7]str = {"       "};
     logic [0:8] i = 0;
     logic [0:63] prog_addr;
-    logic [0:32] temp_arr,  temp_brr;
+    logic [0:31] temp_arr,  temp_brr;
+    logic [0:63] temp_crr;
 
     // 2D Array
     logic [0:8*8-1] opcode_enc[0:14][0:8] ;
@@ -872,7 +873,8 @@ module Core (
                         /* TODO: Printing JB twice */
                         //$write("     ");
                         //$write("%s    $0x%x", opcode_char[opcode], disp_byte);
-                        reg_buffer = {{"$0x"},{rel_to_abs_addr(prog_addr, disp_byte, offset)}};
+                        temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
+                        reg_buffer = {{"$0x"},{byte_to_str(temp_crr[0:31])}, {byte_to_str(temp_crr[32:63])}};
                         //$write("$0x%x", rel_to_abs_addr(prog_addr, disp_byte, offset));
                         instr_buffer = opcode_char[opcode];
                         //$write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, disp_byte, offset));
@@ -886,8 +888,8 @@ module Core (
                         // Print Decoded Instruction
                         //$write("        ");
                         //$write("$0x%x", rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
-                        temp_arr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
-                        reg_buffer = {{"$0x"},{byte_to_str(temp_arr)}};
+                        temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
+                        reg_buffer = {{"$0x"},{byte_to_str(temp_crr[0:31])}, {byte_to_str(temp_crr[32:63])}};
                         instr_buffer = opcode_char[opcode];
                     end
 
@@ -1149,9 +1151,9 @@ module Core (
                         // Print Decoded Instruction
                         //$write("     ");
                         instr_buffer = decode_2_byte_opcode(opcode);
-                        temp_arr = byte_swap(disp_byte);
-                        reg_buffer = {{"$0x"}, {rel_to_abs_addr(prog_addr, byte_to_str(temp_arr), offset)}};
-                        //$write("%s    $0x%x", decode_2_byte_opcode(opcode), rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
+                        temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
+                        reg_buffer = {{"$0x"},{byte_to_str(temp_crr[0:31])}, {byte_to_str(temp_crr[32:63])}};
+                        //$write("%s    $2x%x", decode_2_byte_opcode(opcode), rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
                         
                     end
 
