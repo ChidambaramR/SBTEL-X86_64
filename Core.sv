@@ -1,4 +1,3 @@
-
 module Core (
     input[63:0] entry,
     /* verilator lint_off UNDRIVEN */ /* verilator lint_off UNUSED */ Sysbus bus /* verilator lint_on UNUSED */ /* verilator lint_on UNDRIVEN */
@@ -45,18 +44,22 @@ module Core (
     logic [0:7][0:7]str = {"       "};
     logic [0:8] i = 0;
     logic [0:63] prog_addr;
+    logic [0:32] temp_arr;
 
     // 2D Array
     logic [0:23] opcode_enc[0:14][0:8] ;
     logic [0:255][0:0][0:3] opcode_group;
 
-    logic [0:20*8-1] space_buffer;
-    logic [0:15][0:7] instr_buffer;
-
+    logic [0:15*8-1] space_buffer;
+    logic [0:7][0:7] instr_buffer;
+    logic [0:20*8-1] reg_buffer;
     initial 
     begin
-        for (i = 0; i < 20 ; i++) begin
+        for (i = 0; i < 15 ; i++) begin
             space_buffer[i*8 +: 8] = 254;
+        end
+        for (i = 0; i < 20 ; i++) begin
+            reg_buffer[i*8 +: 8] = "  "; 
         end
         
 
@@ -265,6 +268,22 @@ module Core (
         byte_swap = ret_val;
     endfunction
 
+    function logic[0 : 4*8-1] byte_to_str(logic[0 : 4*8-1] inp);
+        logic[0 : 4*8-1] ret_val;
+        //$display("input %x", inp); 
+        ret_val[0*4 : 1*4-1] = inp[0*4 : 1*4-1] + 30;
+        ret_val[1*4 : 2*4-1] = inp[1*4 : 2*4-1] + 30;
+        ret_val[2*4 : 3*4-1] = inp[2*4 : 3*4-1] + 30;
+        ret_val[3*4 : 4*4-1] = inp[3*4 : 4*4-1] + 30;
+        ret_val[4*4 : 5*4-1] = inp[4*4 : 5*4-1] + 30;
+        ret_val[5*4 : 6*4-1] = inp[5*4 : 6*4-1] + 30;
+        ret_val[6*4 : 7*4-1] = inp[6*4 : 7*4-1] + 30;
+        ret_val[7*4 : 8*4-1] = inp[7*4 : 8*4-1] + 30;
+        //$display("ret %d", ret_val); 
+        byte_to_str = ret_val;
+    endfunction
+
+
     /*
      * Returns the Instruction for a 2 byte Opcode value, i.e. of form "0F <opcode>"
      */
@@ -286,7 +305,7 @@ module Core (
     /*
      * Function to print a 4 byte number byte by byte
      */
-    function  void display_byte (logic[0 : 4*8-1] inp);
+    function void display_byte (logic[0 : 4*8-1] inp);
         $write("%x %x %x %x", inp[0*8 : 1*8-1], inp[1*8 : 2*8-1], inp[2*8 : 3*8-1], inp[3*8 : 4*8-1]);
     endfunction
 
@@ -301,15 +320,17 @@ module Core (
         rel_to_abs_addr = abs_addr;
     endfunction
 
-    function print_buffer(logic[0 : 20*8-1] prog_counter);
+    function print_buffer(logic[0 : 15*8-1] prog_counter);
         logic[0 : 7] offset = 0;
         logic[0 : 7] per_byte;
-        for(offset = 0; offset < 20; offset++)
+        for(offset = 0; offset < 15; offset++)
             begin
                 per_byte = prog_counter[offset*8 +: 1*8];
                 $write(" ");
                 if (per_byte != 254)
                     $write("%x",per_byte);
+                else
+                    $write("  ");
             end
     endfunction
 
@@ -369,14 +390,15 @@ module Core (
              */
             if (temp_prefix >= 64 && temp_prefix <= 79) begin
                 rex_prefix = temp_prefix[0 : 7];
-                offset += 1;
                 space_buffer[(offset)*8 +: 8] = (rex_prefix);
-                $write("%x ", rex_prefix);
+                offset += 1;
+                //$write("%x ", rex_prefix);
    
                 /*
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
                 
 
@@ -401,13 +423,16 @@ module Core (
                          * Refer to Table 3-1 of Intel Manual
                          */
                         space_buffer[(offset)*8 +: 8] = opcode;
-                        $write("%h          %s",opcode, opcode_char[opcode]);
                         instr_buffer = opcode_char[opcode];
+                        //$write("%h          %s",opcode, opcode_char[opcode]);
+                        //$write("%s",opcode_char[opcode]);
+                        
                         if (opcode >= 88)
                             opcode = opcode - 8;
 
                         opcode = opcode - 80 + 8; 
-                        $write("    %s",reg_table_64[opcode]);
+                        //$write("    %s",reg_table_64[opcode]);
+                        reg_buffer = reg_table_64[opcode];
 
                     end // End of Opcode for Special PUSH/POP block
 
@@ -418,13 +443,15 @@ module Core (
                          */
                         high_byte = decode_bytes[offset*8 +: 4*8];
                         offset += 4;
+                        space_buffer[(offset)*8 +: 4*8] = byte_swap(high_byte);
                         low_byte = decode_bytes[offset*8 +: 4*8];
                         offset += 4;
+                        space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
                         //$write("\nhigh byte = %x, low_byte = %x\n",byte_swap(high_byte), byte_swap(low_byte));
-                        $write("%x ",opcode);
-                        space_buffer[(offset)*8 +: 8] = opcode;
-                        $write("         %s    $0x%h%h, %s", opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte),
-                                                            reg_table_64[opcode - 184]);
+                        //$write("%x ",opcode);
+                        reg_buffer = {{"$0x"}, {byte_swap(low_byte)}, {byte_swap(high_byte)}, {"'"}, {reg_table_64[opcode - 184]}};
+                        //$write("         %s    $0x%h%h, %s", opcode_char[opcode], byte_swap(low_byte), byte_swap(high_byte),
+                        //                                    reg_table_64[opcode - 184]);
                         instr_buffer = opcode_char[opcode]; 
                     end // End of Opcode for Special MOV block
 
@@ -432,8 +459,7 @@ module Core (
                         /*
                          * General Handling of 1 byte Opcode Instructions
                          */
-                        $write("%x ",opcode);
-                        space_buffer[(offset)*8 +: 8] = opcode;
+                        //$write("%x ",opcode);
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
                         assert(mod_rm_enc_byte != 0) else $fatal;
@@ -444,9 +470,9 @@ module Core (
                              * The direction (source / destination is available in mod_rm_enc value")
                              */
                             modRM_byte = decode_bytes[offset*8 +: 1*8];
-                            $write("%x ", modRM_byte);
-                            offset += 1;
                             space_buffer[(offset)*8 +: 8] = modRM_byte;
+                            //$write("%x ", modRM_byte);
+                            offset += 1;
        
                             /*
                              * Check if there is a displacement in the instruction
@@ -457,17 +483,17 @@ module Core (
                             if (modRM_byte.mod != 3) begin
                                 if (modRM_byte.mod == 1) begin
                                     short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                    $write("%x", short_disp_byte);
-                                    $write("           ");
-                                    offset += 1;
                                     space_buffer[(offset)*8 +: 8] = short_disp_byte;
+                                    //$write("%x", short_disp_byte);
+                                    //$write("           ");
+                                    offset += 1;
                                 end 
                                 else begin
                                     disp_byte = decode_bytes[offset*8 +: 4*8];
-                                    display_byte(disp_byte);
-                                    $write("           ");
-                                    offset += 4; // Assuming immediate values as 4. Correct?
                                     space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                                    //display_byte(disp_byte);
+                                    //$write("           ");
+                                    offset += 4; // Assuming immediate values as 4. Correct?
                                 end
                             end
 
@@ -476,20 +502,20 @@ module Core (
                              */
                             if (mod_rm_enc_byte == "MI ") begin
                                 imm_byte = decode_bytes[offset*8 +: 4*8]; 
-                                display_byte(imm_byte);
-                                $write("           ");
-                                offset += 4; // Assuming immediate values as 4. Correct?
                                 space_buffer[(offset)*8 +: 4*8] = imm_byte;
+                                //display_byte(imm_byte);
+                                //$write("           ");
+                                offset += 4; // Assuming immediate values as 4. Correct?
                             end
                             else if (mod_rm_enc_byte == "MIS") begin
                                 /*
                                  * Immediate value is sign extended
                                  */
                                 short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
-                                $write("%x", short_imm_byte);
-                                $write("           ");
-                                offset += 1;
                                 space_buffer[(offset)*8 +: 8] = short_imm_byte;
+                                //$write("%x", short_imm_byte);
+                                //$write("           ");
+                                offset += 1;
                             end
 
                         end
@@ -511,10 +537,11 @@ module Core (
                             /*
                             * We might have a shared opcode
                             */
-                            $write("%s         ",opcode_enc[opcode_group[opcode]][regByte]);
+                            instr_buffer = opcode_enc[opcode_group[opcode]][regByte];
+                            //$write("%s         ",opcode_enc[opcode_group[opcode]][regByte]);
                         end
                         else begin
-                            $write("%s    ",opcode_char[opcode]);
+                            //$write("%s    ",opcode_char[opcode]);
                             instr_buffer = opcode_char[opcode];
                         end
 
@@ -526,7 +553,7 @@ module Core (
                             if (mod_rm_enc_byte == "MR ") begin
                             /*
                              * Register addressing mode
-                             */  
+                             */ 
                                 if (disp_byte != 0 || short_disp_byte != 0)
                                     /*
                                      * There is displacement
@@ -537,7 +564,8 @@ module Core (
                                          * that displacement, then the mod bits of the modRM byte
                                          * will be 0
                                          */
-                                        $write("%s, (%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                                        reg_buffer = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                        //$write("%s, (%s)",reg_table_64[regByte], reg_table_64[rmByte]);
                                     end
                                     else begin
                                         /*
@@ -547,7 +575,9 @@ module Core (
                                             /*
                                             * It is NOT sign extended. The displacement value is 32 bits
                                             */
-                                            $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                            temp_arr = byte_swap(disp_byte);
+                                            reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte_to_str(temp_arr)}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                            //$write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
                                         end
 
                                         else if (modRM_byte.mod == 1) begin
@@ -555,7 +585,8 @@ module Core (
                                             * The displacement value is SIGN extended
                                             */
                                             signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                            $write("%s, $0x%h(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
+                                            reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                            //$write("%s, $0x%h(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
                                         end
                                     end
 
@@ -563,7 +594,8 @@ module Core (
                                     /*
                                      * There is no displacement
                                      */
-                                    $write("%s, %s",reg_table_64[regByte], reg_table_64[rmByte]);
+                                    //$write("%s, %s",reg_table_64[regByte], reg_table_64[rmByte]);
+                                    reg_buffer = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
                                 end
                             end
 
@@ -580,7 +612,8 @@ module Core (
                                     /*
                                      * No immediate value
                                      */
-                                        $write("%s, (%s)", reg_table_64[rmByte], reg_table_64[regByte]);
+                                        reg_buffer = {{reg_table_64[rmByte]}, {", "}, {"("}, {reg_table_64[regByte]}, {")"}};
+                                        //$write("%s, (%s)", reg_table_64[rmByte], reg_table_64[regByte]);
                                     end
 
                                     else begin 
@@ -588,7 +621,9 @@ module Core (
                                             /*
                                             * It is NOT sign extended. The displacement value is 32 bits
                                             */
-                                            $write("$0x%h(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
+                                            temp_arr = byte_swap(disp_byte);
+                                            reg_buffer = {{"$0x"}, {byte_to_str(temp_arr)}, {"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                                            //$write("$0x%h(%s), %s",byte_swap(disp_byte), reg_table_64[rmByte], reg_table_64[regByte]); 
                                         end
         
                                         else if (modRM_byte.mod == 1) begin
@@ -596,7 +631,8 @@ module Core (
                                             * The displacement value is sign extended
                                             */
                                             signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                            $write("$0x%h(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
+                                            reg_buffer = {{"$0x"}, {byte_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                                            //$write("$0x%h(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
                                         end
                                     end
                                 end
@@ -607,7 +643,8 @@ module Core (
                                  * Immediate addressing mode
                                  */
                                 //if (imm_byte != 0) begin
-                                    $write("$0x%h, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
+                                    reg_buffer = {{"$0x"}, {byte_swap(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                                    //$write("$0x%h, %s",byte_swap(imm_byte), reg_table_64[rmByte]);
                                 //end else begin
                                 //    $write("%s",reg_table_64[rmByte]);
                                 //end 
@@ -627,12 +664,14 @@ module Core (
                                 * Right now handling only 1 byte immediate to sign extension
                                 */
                                 signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                                $write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
+                                reg_buffer = {{"$0x"}, {byte_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                                //$write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
                             end
 
                         end // END OF REW.W bit check
                         else begin          
-                            $write("%s %s",reg_table_32[regByte], reg_table_32[rmByte]);
+                            reg_buffer = {{reg_table_32[regByte]}, {", "}, {reg_table_32[rmByte]}};
+                            //$write("%s %s",reg_table_32[regByte], reg_table_32[rmByte]);
                         end
                     end 
                 end
@@ -643,19 +682,23 @@ module Core (
             
             end else if (temp_prefix == 101) begin
                 /* GS Segment Override Prefix */
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                $write("%x", opcode);
-                $write("            ");
-                $write(" GS");
+                //$write("%x", opcode);
+                //$write("            ");
+                //$write(" GS");
+                instr_buffer = "GS      ";
 
             end else if (temp_prefix == 100) begin
                 /* FS Segment Override Prefix */
                 rex_prefix = temp_prefix[0 : 7];
+                space_buffer[(offset)*8 +: 8] = rex_prefix;
                 offset += 1;
-                $write("%x ", rex_prefix);
+                //$write("%x ", rex_prefix);
                 opcode = decode_bytes[offset*8 +: 1*8]; 
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                $write("%x", opcode);
+                //$write("%x", opcode);
                 if (opcode != 15) begin
                     mod_rm_enc_byte = mod_rm_enc[opcode];
                     assert(mod_rm_enc_byte != 0) else $fatal;
@@ -665,7 +708,8 @@ module Core (
                          * Register addressing mode
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write(" %x", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
+                        //$write(" %x", modRM_byte);
                         offset += 1;
 
                         /*
@@ -694,18 +738,20 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                $write(" %x", short_disp_byte);
+                                space_buffer[(offset)*8 +: 8] = short_disp_byte;
+                                //$write(" %x", short_disp_byte);
                                 offset += 1;
                             end
                             else begin
                                 /* TODO : Need to handle printing 4 bytes */
                                 disp_byte = decode_bytes[offset*8 +: 4*8]; 
+                                space_buffer[(offset)*8 +: 4*8] = disp_byte;
                                 offset += 4; // Assuming immediate values as 4. Correct?
                             end
                         end
                         
-                        $write("       ");
-                        $write("%s    ",opcode_char[opcode]);
+                        //$write("       ");
+                        //$write("%s    ",opcode_char[opcode]);
                         instr_buffer = opcode_char[opcode];
 
                         
@@ -719,7 +765,8 @@ module Core (
                                      * that displacement, then the mod bits of the modRM byte
                                      * will be 0
                                      */
-                                    $write("%s, %%:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                                    reg_buffer = {{reg_table_64[regByte]}, {", %:("}, {reg_table_64[rmByte]}, {")"}};
+                                    //$write("%s, %%:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
                                 end
                                 else begin
                                     /*
@@ -729,7 +776,8 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 8 bits
                                         */
-                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
+                                        reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte_swap(disp_byte)}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                        //$write("%s, $0x%h(%s)",reg_table_64[regByte], byte_swap(disp_byte), reg_table_64[rmByte]);
                                     end
 
                                     else if(modRM_byte.mod == 1) begin
@@ -737,7 +785,8 @@ module Core (
                                         * The displacement value is SIGN extended
                                         */
                                         signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
-                                        $write("%s, $0x%h(%s)",reg_table_64[regByte], (signed_disp_byte), reg_table_64[rmByte]);
+                                        reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {signed_disp_byte}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                        //$write("%s, $0x%h(%s)",reg_table_64[regByte], (signed_disp_byte), reg_table_64[rmByte]);
                                     end
                                 end
 
@@ -745,7 +794,8 @@ module Core (
                                 /*
                                  * There is no displacement
                                  */
-                                $write("%s, %%fs:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
+                                reg_buffer = {{reg_table_64[regByte]}, {", %fs:"}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                //$write("%s, %%fs:(%s)",reg_table_64[regByte], reg_table_64[rmByte]);
                             end
                         end
 
@@ -757,21 +807,24 @@ module Core (
                  * Special Case: No REX or Prefix bytes. As a result the first byte is itself the opcode
                  */
                 opcode = decode_bytes[0 : 7];
-                $write("%x ", opcode);
+                space_buffer[(offset)*8 +: 8] = opcode;
+                //$write("%x ", opcode);
                 offset += 1;
 
                 if (opcode == 108) begin
                     /* INSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    $write("            ");
-                    $write("%s    (%%dx), %%es:(%%rdi)",opcode_char[opcode]);
+                    //$write("            ");
+                    reg_buffer = {"(%dx), %es:(%rdi)"};
+                    //$write("(%%dx), %%es:(%%rdi)");
                     instr_buffer = opcode_char[opcode];
-            
+             
                 end else if (opcode == 111) begin
                     /* OUTSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    $write("            ");
-                    $write("%s     %%ds:(%%rsi), %%dx)",opcode_char[opcode]);
+                    //$write("            ");
+                    reg_buffer = {"%ds:(%rsi), (%dx)"};
+                    //$write("%%ds:(%%rsi), %%dx)");
                     instr_buffer = opcode_char[opcode];
                 
                 end else if (opcode != 15) begin
@@ -782,7 +835,8 @@ module Core (
                     if (mod_rm_enc_byte == "M  ") begin
 
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x          ", modRM_byte);
+                        //$write("%x          ", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
 
                         // reg bits need to be 2
@@ -791,30 +845,35 @@ module Core (
                         rmByte = {1'b0, {modRM_byte.rm}};
 
                         // Print Decoded Instruction
-                        $write("%s    *%s", opcode_char[opcode], reg_table_64[rmByte]);
+                        //$write("*%s", reg_table_64[rmByte]);
+                        reg_buffer = {{"*"} , {reg_table_64[rmByte]}};
                         instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D1 ") begin
                         short_disp_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x", short_disp_byte);
+                        //$write("%x", short_disp_byte);
+                        space_buffer[(offset)*8 +: 8] = short_disp_byte;
                         offset += 1;
                         
                         // Print Decoded Instruction
                         disp_byte = {24'b0, short_disp_byte};
-                        $write("     ");
                         /* TODO: Printing JB twice */
+                        //$write("     ");
                         //$write("%s    $0x%x", opcode_char[opcode], disp_byte);
-                        $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, disp_byte, offset));
+                        reg_buffer = {{"$0x"},{rel_to_abs_addr(prog_addr, disp_byte, offset)}};
+                        //$write("$0x%x", rel_to_abs_addr(prog_addr, disp_byte, offset));
                         instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
-                        display_byte(disp_byte);
+                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                        //display_byte(disp_byte);
                         offset += 4;
      
                         // Print Decoded Instruction
-                        $write("        ");
-                        $write("%s    $0x%x", opcode_char[opcode], rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
+                        //$write("        ");
+                        //$write("$0x%x", rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
+                        reg_buffer = {{"$0x"},{rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset)}};
                         instr_buffer = opcode_char[opcode];
                     end
 
@@ -830,7 +889,8 @@ module Core (
                          * Register addressing mode
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
-                        $write("%x", modRM_byte);
+                        //$write("%x", modRM_byte);
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
 
                         /*
@@ -859,7 +919,8 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
-                                $write(" %x", short_disp_byte);
+                                //$write(" %x", short_disp_byte);
+                                space_buffer[(offset)*8 +: 8] = short_disp_byte;
                                 offset += 1;
                             end
                             else begin
@@ -869,8 +930,8 @@ module Core (
                             end
                         end
                         
-                        $write("       ");
-                        $write("%s    ",opcode_char[opcode]);
+                        //$write("       ");
+                        //$write("%s    ",opcode_char[opcode]);
                         instr_buffer = opcode_char[opcode];
                         
                             if (disp_byte != 0 || short_disp_byte != 0)
@@ -883,7 +944,8 @@ module Core (
                                      * that displacement, then the mod bits of the modRM byte
                                      * will be 0
                                      */
-                                    $write("%s, (%s)",reg_table_8[regByte], reg_table_8[rmByte]);
+                                    reg_buffer = {{reg_table_8[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                    //$write("%s, (%s)",reg_table_8[regByte], reg_table_8[rmByte]);
                                 end
                                 else begin
                                     /*
@@ -893,14 +955,16 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 8 bits
                                         */
-                                        $write("%s, $0x%h(%s)",reg_table_8[regByte], disp_byte, reg_table_8[rmByte]);
+                                        reg_buffer = {{reg_table_8[regByte]}, {", 0x"}, {disp_byte}, {"("}, {reg_table_8[rmByte]}, {")"}};
+                                        //$write("%s, $0x%h(%s)",reg_table_8[regByte], disp_byte, reg_table_8[rmByte]);
                                     end
 
                                     else if(modRM_byte.mod == 1) begin
                                         /*
                                         * The displacement value is SIGN extended
                                         */
-                                        $write("%s, $0x%h(%s)",reg_table_8[regByte], short_disp_byte, reg_table_8[rmByte]);
+                                        //$write("%s, $0x%h(%s)",reg_table_8[regByte], short_disp_byte, reg_table_8[rmByte]);
+                                        reg_buffer = {{reg_table_8[regByte]}, {", 0x"}, {short_disp_byte}, {"("}, {reg_table_8[rmByte]}, {")"}};
                                     end
                                 end
 
@@ -908,7 +972,8 @@ module Core (
                                 /*
                                  * There is no displacement
                                  */
-                                $write("%s, %s",reg_table_8[regByte], reg_table_8[rmByte]);
+                                reg_buffer = {{reg_table_8[regByte]}, {", "}, {reg_table_8[rmByte]}};
+                                //$write("%s, %s",reg_table_8[regByte], reg_table_8[rmByte]);
                             end
                         end
 
@@ -918,6 +983,7 @@ module Core (
                          */
                         
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        /* TODO: Need to handle this write into one of the buffers */
                         $write("%x", modRM_byte);
                         offset += 1;
                         
@@ -947,6 +1013,7 @@ module Core (
                         if (modRM_byte.mod != 3) begin
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
+                                /* TODO: Need to handle this write into one of the buffers */
                                 $write(" %x", short_disp_byte);
                                 offset += 1;
                             end
@@ -957,8 +1024,8 @@ module Core (
                             end
                         end
                         
-                        $write("      ");
-                        $write("%s    ",opcode_char[opcode]);
+                        //$write("      ");
+                        //$write("%s    ",opcode_char[opcode]);
                         instr_buffer = opcode_char[opcode];
                             
                             if (disp_byte != 0 || short_disp_byte != 0) begin
@@ -970,7 +1037,8 @@ module Core (
                                 /*
                                  * No immediate value
                                  */
-                                    $write("%s, (%s)", reg_table_8[rmByte], reg_table_8[regByte]);
+                                    reg_buffer = {{reg_table_8[rmByte]}, {", "}, {"("}, {reg_table_8[regByte]}, {")"}};
+                                    //$write("%s, (%s)", reg_table_8[rmByte], reg_table_8[regByte]);
                                 end
 
                                 else begin 
@@ -978,14 +1046,16 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 32 bits
                                         */
-                                        $write("$0x%h(%s), %s",disp_byte, reg_table_8[rmByte], reg_table_8[regByte]); 
+                                        reg_buffer = {{"$0x"}, {disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
+                                        //$write("$0x%h(%s), %s",disp_byte, reg_table_8[rmByte], reg_table_8[regByte]); 
                                     end
     
                                     else if(modRM_byte.mod == 1) begin
                                         /*
                                         * The displacement value is sign extended
                                         */
-                                        $write("$0x%h(%s), %s",short_disp_byte, reg_table_8[rmByte], reg_table_8[regByte]);
+                                        reg_buffer = {{"$0x"}, {short_disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
+                                        //$write("$0x%h(%s), %s",short_disp_byte, reg_table_8[rmByte], reg_table_8[regByte]);
                                     end
                                 end
                             end
@@ -996,7 +1066,8 @@ module Core (
                              * Immediate addressing mode
                              */
                             //if (imm_byte != 0) begin
-                                $write("$0x%h, %s",byte_swap(imm_byte), reg_table_8[rmByte]);
+                                reg_buffer = {{"$0x"}, {byte_swap(imm_byte)}, {", "}, {reg_table_8[rmByte]}};
+                                //$write("$0x%h, %s",byte_swap(imm_byte), reg_table_8[rmByte]);
                             //end else begin
                             //    $write("%s",reg_table_64[rmByte]);
                             //end 
@@ -1016,7 +1087,8 @@ module Core (
                             * Right now handling only 1 byte immediate to sign extension
                             */
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                            $write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
+                            reg_buffer = {{"$0x"}, {signed_imm_byte}, {", "}, {reg_table_64[rmByte]}};
+                            //$write("$0x%h, %s",signed_imm_byte,reg_table_64[rmByte]);
                         end
                     else if (mod_rm_enc_byte == "O  ") begin
                         /*
@@ -1027,13 +1099,14 @@ module Core (
                         * So if we subtract 50 from 51, ans is 1. Now I will index this into 
                         * reg_64_table. reg_table_64[1] = RCX
                         */
-                        $write("            %s", opcode_char[opcode]);
+                        //$write("            %s", opcode_char[opcode]);
                         instr_buffer = opcode_char[opcode];
                         if (opcode >= 88)
                               opcode = opcode - 8;
 
                         opcode = opcode - 80;
-                        $write("    %s", reg_table_64[opcode]);
+                        reg_buffer = {reg_table_64[opcode]};
+                        //$write("    %s", reg_table_64[opcode]);
                     end
                 end
                 else begin
@@ -1041,34 +1114,50 @@ module Core (
                      * Two byte Opcode
                      */
                     opcode = decode_bytes[offset*8 +: 1*8];
-                    $write("%x ", opcode);
+                    space_buffer[(offset)*8 +: 8] = opcode;
+                    //$write("%x ", opcode);
                     offset += 1;
 
                     // All the 2 byte Opcodes except "0F 05" have a 4 byte displacement
                     if (opcode == 5) begin
                         // Print Decoded Instruction
-                        $write("         ");
-                        $write("%s", decode_2_byte_opcode(opcode));
+                        //$write("         ");
+                        //$write("%s", decode_2_byte_opcode(opcode));
+                        instr_buffer = decode_2_byte_opcode(opcode);
                     end
                     else begin
                         disp_byte = decode_bytes[offset*8 +: 4*8];
-                        display_byte(disp_byte);
+                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                        //display_byte(disp_byte);
                         offset += 4;
 
                         // Print Decoded Instruction
-                        $write("     ");
-                        $write("%s    $0x%x", decode_2_byte_opcode(opcode), rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
+                        //$write("     ");
+                        instr_buffer = decode_2_byte_opcode(opcode);
+                        reg_buffer = {{"$0x"}, {rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset)}};
+                        //$write("%s    $0x%x", decode_2_byte_opcode(opcode), rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset));
                         
                     end
 
                 end
             end
             bytes_decoded_this_cycle =+ offset;
+            
             //$write("buffer: %x hello",space_buffer);
             //$write("buffer function : \t");
             print_buffer(space_buffer);
-            $write("%s",instr_buffer);
+            $write("%s     ",instr_buffer);
+            $write("%s     ",reg_buffer);
             instr_buffer = str;
+            for (i = 0; i < 15 ; i++) begin
+                space_buffer[i*8 +: 8] = 254;
+            end
+            for (i = 0; i < 20 ; i++) begin
+                reg_buffer[i*8 +: 8] = "  "; 
+            end
+
+            //$write(" %x",space_buffer);
+
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
         end else begin
