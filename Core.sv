@@ -453,7 +453,7 @@ module Core (
             high_byte = 0;
             low_byte = 0;
             for (i = 0; i < 32 ; i++) begin
-                reg_buffer[i*8 +: 8] = "  "; 
+                reg_buffer[i*8 +: 8] = " "; 
             end
    
             // Compute program address for next instruction
@@ -502,7 +502,7 @@ module Core (
                             opcode = opcode - 8;
 
                         opcode = opcode - 80 + 8; 
-                        reg_buffer = reg_table_64[opcode];
+                        reg_buffer[0:31] = reg_table_64[opcode];
 
                     end // End of Opcode for Special PUSH/POP block
 
@@ -518,7 +518,7 @@ module Core (
                         space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
                         offset += 4;
 
-                        reg_buffer = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
+                        reg_buffer[0:191] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
                                       {","}, {reg_table_64[opcode - 184]} };
                         instr_buffer = opcode_char[opcode]; 
                     end // End of Opcode for Special MOV block
@@ -548,17 +548,17 @@ module Core (
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
                         if (mod_rm_enc_byte == "MI ") begin
-                            imm_byte = decode_bytes[offset*8 +: 1*8]; 
-                            space_buffer[(offset)*8 +: 1*8] = imm_byte;
+                            imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
+                            space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
                             offset += 1;
-                            reg_buffer = {{"$0x"}, {byte4_to_str(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
                         /* No Test Case for mod encode = M1 or MC */
                         else if (mod_rm_enc_byte == "M1 ") begin
-                            reg_buffer = {{"$0x01, "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:87] = {{"$0x01, "}, {reg_table_64[rmByte]}};
                         end
                         else if (mod_rm_enc_byte == "MC ") begin
-                            reg_buffer = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:71] = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
                         end
                         else begin
                             assert(0) else $fatal(1, "Invalid Mod RM Encoding for SHIFT");
@@ -661,7 +661,7 @@ module Core (
                             assert(modRM_byte.reg1 == 2) else $fatal;
 
                             rmByte = {1'b0, {modRM_byte.rm}};
-                            reg_buffer = {{"*"} , {reg_table_64[rmByte]}};
+                            reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
                             instr_buffer = opcode_char[opcode];
                         end
 
@@ -673,13 +673,13 @@ module Core (
                                 /*
                                  * There is no displacement and no index registers
                                  */
-                                reg_buffer = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
+                                reg_buffer[0:79] = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
                             end
                             else if (disp_byte != 0) begin
                                 /*
                                 * It is NOT sign extended. The displacement value is 32 bits
                                 */
-                                reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
+                                reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                                 {reg_table_64[rmByte]}, {")"}};
                             end
                             else if (short_disp_byte != 0) begin
@@ -687,7 +687,7 @@ module Core (
                                 * The displacement value is SIGN extended
                                 */
                                 signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
                                                 {"("}, {reg_table_64[rmByte]}, {")"}};
                             end
                             else begin
@@ -695,7 +695,7 @@ module Core (
                                  * There is no displacement but only index registers
                                  */
                                 assert(modRM_byte.mod == 0) else $fatal;
-                                reg_buffer = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                reg_buffer[0:95] = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
                             end
                         end
 
@@ -708,13 +708,13 @@ module Core (
                                 /*
                                  * There is no displacement and index register
                                  */
-                                reg_buffer = {{reg_table_64[rmByte]}, {reg_table_64[regByte]}};
+                                reg_buffer[0:63] = {{reg_table_64[rmByte]}, {reg_table_64[regByte]}};
                             end
                             else if (disp_byte != 0) begin
                                 /*
                                 * It is NOT sign extended. The displacement value is 32 bits
                                 */
-                                reg_buffer = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
+                                reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
                                                 {reg_table_64[regByte]}};
                             end
                             else if (short_disp_byte != 0) begin
@@ -722,7 +722,7 @@ module Core (
                                 * The displacement value is SIGN extended
                                 */
                                 signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                reg_buffer = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
+                                reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
                                                 {"), "}, {reg_table_64[regByte]}};
                             end
                             else begin
@@ -730,7 +730,7 @@ module Core (
                                  * There is no displacement but only index registers
                                  */
                                 assert(modRM_byte.mod == 0) else $fatal;
-                                reg_buffer = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                                reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
                             end
                         end
 
@@ -738,7 +738,7 @@ module Core (
                             /*
                              * Immediate addressing mode
                              */
-                            reg_buffer = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
 
                             /*
                             Dont know why I wrote this code. Keep it. Do not delete
@@ -755,7 +755,7 @@ module Core (
                             * Right now handling only 1 byte immediate to sign extension
                             */
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                            reg_buffer = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
                     end 
                 end
@@ -844,7 +844,7 @@ module Core (
                                  * that displacement, then the mod bits of the modRM byte
                                  * will be 0
                                  */
-                                reg_buffer = {{reg_table_64[regByte]}, {", %:("}, {reg_table_64[rmByte]}, {")"}};
+                                reg_buffer[0:111] = {{reg_table_64[regByte]}, {", %:("}, {reg_table_64[rmByte]}, {")"}};
                             end
                             else begin
                                 /*
@@ -855,7 +855,7 @@ module Core (
                                     * It is NOT sign extended. The displacement value is 8 bits
                                     */
                                     
-                                    reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))},
+                                    reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))},
                                                 {"("}, {reg_table_64[rmByte]}, {")"}};
                                 end
 
@@ -864,7 +864,7 @@ module Core (
                                      * The displacement value is SIGN extended
                                      */
                                     signed_disp_byte = {{{56}{short_disp_byte[0]}}, {short_disp_byte}};
-                                    reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                    reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
                                                     {"("}, {reg_table_64[rmByte]}, {")"}};
                                 end
                             end
@@ -873,7 +873,7 @@ module Core (
                             /*
                              * There is no displacement
                              */
-                            reg_buffer = {{reg_table_64[regByte]}, {", %fs:"}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                            reg_buffer[0:127] = {{reg_table_64[regByte]}, {", %fs:"}, {"("}, {reg_table_64[rmByte]}, {")"}};
                         end
                     end
                 end
@@ -917,7 +917,7 @@ module Core (
                         assert(modRM_byte.reg1 == 2) else $fatal;
 
                         rmByte = {1'b0, {modRM_byte.rm}};
-                        reg_buffer = {{"*"} , {reg_table_64[rmByte]}};
+                        reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
                         instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D1 ") begin
@@ -927,7 +927,7 @@ module Core (
                         
                         disp_byte = {24'b0, short_disp_byte};
                         temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
-                        reg_buffer = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                        reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                         instr_buffer = opcode_char[opcode];
                     end
                     else if (mod_rm_enc_byte == "D4 ") begin
@@ -936,7 +936,7 @@ module Core (
                         offset += 4;
      
                         temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
-                        reg_buffer = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                        reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                         instr_buffer = opcode_char[opcode];
                     end
 
@@ -1003,7 +1003,7 @@ module Core (
                                      * that displacement, then the mod bits of the modRM byte
                                      * will be 0
                                      */
-                                    reg_buffer = {{reg_table_8[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                    reg_buffer[0:95] = {{reg_table_8[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
                                 end
                                 else begin
                                     /*
@@ -1013,14 +1013,14 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 8 bits
                                         */
-                                        reg_buffer = {{reg_table_8[regByte]}, {", 0x"}, {byte4_to_str(disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
+                                        reg_buffer[0:175] = {{reg_table_8[regByte]}, {", 0x"}, {byte4_to_str(disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
                                     end
 
                                     else if(modRM_byte.mod == 1) begin
                                         /*
                                         * The displacement value is SIGN extended
                                         */
-                                        reg_buffer = {{reg_table_8[regByte]}, {", 0x"}, {byte4_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
+                                        reg_buffer[0:175] = {{reg_table_8[regByte]}, {", 0x"}, {byte4_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
                                     end
                                 end
 
@@ -1028,7 +1028,7 @@ module Core (
                                 /*
                                  * There is no displacement
                                  */
-                                reg_buffer = {{reg_table_8[regByte]}, {", "}, {reg_table_8[rmByte]}};
+                                reg_buffer[0:79] = {{reg_table_8[regByte]}, {", "}, {reg_table_8[rmByte]}};
                             end
                         end
 
@@ -1089,7 +1089,7 @@ module Core (
                                     /*
                                      * No immediate value
                                      */
-                                    reg_buffer = {{reg_table_8[rmByte]}, {", "}, {"("}, {reg_table_8[regByte]}, {")"}};
+                                    reg_buffer[0:95] = {{reg_table_8[rmByte]}, {", "}, {"("}, {reg_table_8[regByte]}, {")"}};
                                 end
 
                                 else begin 
@@ -1097,7 +1097,7 @@ module Core (
                                         /*
                                         * It is NOT sign extended. The displacement value is 32 bits
                                         */
-                                        reg_buffer = {{"$0x"}, {disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
+                                        reg_buffer[0:151] = {{"$0x"}, {disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
                                         //$write("$0x%h(%s), %s",disp_byte, reg_table_8[rmByte], reg_table_8[regByte]); 
                                     end
     
@@ -1105,7 +1105,7 @@ module Core (
                                         /*
                                         * The displacement value is sign extended
                                         */
-                                        reg_buffer = {{"$0x"}, {short_disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
+                                        reg_buffer[0:127] = {{"$0x"}, {short_disp_byte}, {"("}, {reg_table_8[rmByte]}, {"), "}, {reg_table_8[regByte]}};
                                     end
                                 end
                             end
@@ -1115,7 +1115,7 @@ module Core (
                             /*
                              * Immediate addressing mode
                              */
-                            reg_buffer = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_8[rmByte]}};
+                            reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_8[rmByte]}};
                         end
 
                         else if(mod_rm_enc_byte == "MIS") begin
@@ -1124,7 +1124,7 @@ module Core (
                              * Right now handling only 1 byte immediate to sign extension
                              */
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                            reg_buffer = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
                     else if (mod_rm_enc_byte == "O  ") begin
                         /*
@@ -1140,7 +1140,7 @@ module Core (
                               opcode = opcode - 8;
 
                         opcode = opcode - 80;
-                        reg_buffer = {reg_table_64[opcode]};
+                        reg_buffer[0:31] = {reg_table_64[opcode]};
                     end
                 end
                 else begin
@@ -1162,7 +1162,7 @@ module Core (
 
                         instr_buffer = decode_2_byte_opcode(opcode);
                         temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
-                        reg_buffer = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                        reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                         
                     end
 
