@@ -170,6 +170,18 @@ module Core (
         opcode_char[141] = "LEA     "; mod_rm_enc[141] = "RM ";
         
         /*
+        * Opcode for SHL and SHR
+        */
+        opcode_char[193] = "SHR     "; mod_rm_enc[193] = "MI ";
+        opcode_char[209] = "SHR     "; mod_rm_enc[209] = "M1 ";
+        opcode_char[211] = "SHR     "; mod_rm_enc[211] = "MC ";
+        
+        /*
+        * Opcode for TEST
+        */
+        opcode_char[133] = "TEST    "; mod_rm_enc[133] = "MR ";
+        
+        /*
         * Opcode for NOP
         */
         opcode_char[144] = "NOP     ";
@@ -493,6 +505,53 @@ module Core (
                         instr_buffer = opcode_char[opcode]; 
                     end // End of Opcode for Special MOV block
 
+                    else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
+                        /*
+                         * SHIFT Left and Right Logic
+                         * Case 193 : SHR r/m64, imm8 ==> Shift Register r/m64 right by imm8 bits (Op/En : "MI")
+                         * Case 209 : SHR r/m64, 1    ==> Shift Register r/m64 right by 1 bit     (Op/En : "M1")
+                         * Case 211 : SHR r/m64, cl   ==> Shift Register r/m64 right by cl bits   (Op/En : "MC")
+                         * 
+                         * If reg = 5, then 
+                         *       SHIFT Right 
+                         *   else if reg = 4
+                         *       SHIFT Left
+                         */
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
+                        offset += 1;
+
+                        regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
+                        rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
+                        mod_rm_enc_byte = mod_rm_enc[opcode];
+
+                        if (mod_rm_enc_byte == "MI ") begin
+                            imm_byte = decode_bytes[offset*8 +: 1*8]; 
+                            space_buffer[(offset)*8 +: 1*8] = imm_byte;
+                            offset += 1;
+                            if(modRM_byte.reg1 == 4)
+                                instr_buffer = {"SHL     "};
+                            else if(modRM_byte.reg1 == 5)
+                                instr_buffer = {"SHR     "};
+                            reg_buffer = {{"$0x"}, {byte4_to_str(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                        end
+                        /* No Test Case for mod encode = M1 or MC */
+                        else if (mod_rm_enc_byte == "M1 ") begin
+                            if(modRM_byte.reg1 == 4)
+                                instr_buffer = {"SHL     "};
+                            else if(modRM_byte.reg1 == 5)
+                                instr_buffer = {"SHR     "};
+                            reg_buffer = {{"$0x01, "}, {reg_table_64[rmByte]}};
+                        end
+                        else if (mod_rm_enc_byte == "MC ") begin
+                            if(modRM_byte.reg1 == 4)
+                                instr_buffer = {"SHL     "};
+                            else if(modRM_byte.reg1 == 5)
+                                instr_buffer = {"SHR     "};
+                            reg_buffer = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
+                        end
+                    end // End of Opcode for SHIFT Block
+                    
                     else begin 
                         /*
                          * General Handling of 1 byte Opcode Instructions
