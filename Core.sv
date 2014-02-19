@@ -98,10 +98,19 @@ module Core (
          */
         opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
         opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
-        opcode_char[184] = "MOV     "; mod_rm_enc[199] = "MI "; // B8
-        opcode_char[185] = "MOV     "; mod_rm_enc[199] = "MI "; // B8
-        opcode_char[191] = "MOV     "; mod_rm_enc[199] = "MI "; // BF
         opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // C7
+
+        /* 
+         * Special MOV Opcodes
+         */
+        opcode_char[184] = "MOV     "; mod_rm_enc[184] = "SP "; // B8
+        opcode_char[185] = "MOV     "; mod_rm_enc[185] = "SP "; // B9
+        opcode_char[186] = "MOV     "; mod_rm_enc[196] = "SP "; // BA
+        opcode_char[187] = "MOV     "; mod_rm_enc[187] = "SP "; // BB
+        opcode_char[189] = "MOV     "; mod_rm_enc[188] = "SP "; // BC
+        opcode_char[190] = "MOV     "; mod_rm_enc[189] = "SP "; // BD
+        opcode_char[191] = "MOV     "; mod_rm_enc[190] = "SP "; // BE
+        opcode_char[191] = "MOV     "; mod_rm_enc[191] = "SP "; // BF
     
         /*
          * Opcodes for Instructions w/o REX Prefixes
@@ -137,27 +146,27 @@ module Core (
         /*
         * Opcode for PUSH
         */
-        opcode_char[80] = "PUSH    "; mod_rm_enc[80] = "O  ";
-        opcode_char[81] = "PUSH    "; mod_rm_enc[81] = "O  ";
-        opcode_char[82] = "PUSH    "; mod_rm_enc[82] = "O  ";
-        opcode_char[83] = "PUSH    "; mod_rm_enc[83] = "O  ";
-        opcode_char[84] = "PUSH    "; mod_rm_enc[84] = "O  ";
-        opcode_char[85] = "PUSH    "; mod_rm_enc[85] = "O  ";
-        opcode_char[86] = "PUSH    "; mod_rm_enc[86] = "O  ";
-        opcode_char[87] = "PUSH    "; mod_rm_enc[87] = "O  ";
+        opcode_char[80] = "PUSH    "; mod_rm_enc[80] = "0  ";
+        opcode_char[81] = "PUSH    "; mod_rm_enc[81] = "0  ";
+        opcode_char[82] = "PUSH    "; mod_rm_enc[82] = "0  ";
+        opcode_char[83] = "PUSH    "; mod_rm_enc[83] = "0  ";
+        opcode_char[84] = "PUSH    "; mod_rm_enc[84] = "0  ";
+        opcode_char[85] = "PUSH    "; mod_rm_enc[85] = "0  ";
+        opcode_char[86] = "PUSH    "; mod_rm_enc[86] = "0  ";
+        opcode_char[87] = "PUSH    "; mod_rm_enc[87] = "0  ";
        
 
         /*
         * Opcode for POP
         */
-        opcode_char[88] = "POP     "; mod_rm_enc[88] = "O  ";
-        opcode_char[89] = "POP     "; mod_rm_enc[89] = "O  ";
-        opcode_char[90] = "POP     "; mod_rm_enc[90] = "O  ";
-        opcode_char[91] = "POP     "; mod_rm_enc[91] = "O  ";
-        opcode_char[92] = "POP     "; mod_rm_enc[92] = "O  ";
-        opcode_char[93] = "POP     "; mod_rm_enc[93] = "O  ";
-        opcode_char[94] = "POP     "; mod_rm_enc[94] = "O  ";
-        opcode_char[95] = "POP     "; mod_rm_enc[95] = "O  ";
+        opcode_char[88] = "POP     "; mod_rm_enc[88] = "0  ";
+        opcode_char[89] = "POP     "; mod_rm_enc[89] = "0  ";
+        opcode_char[90] = "POP     "; mod_rm_enc[90] = "0  ";
+        opcode_char[91] = "POP     "; mod_rm_enc[91] = "0  ";
+        opcode_char[92] = "POP     "; mod_rm_enc[92] = "0  ";
+        opcode_char[93] = "POP     "; mod_rm_enc[93] = "0  ";
+        opcode_char[94] = "POP     "; mod_rm_enc[94] = "0  ";
+        opcode_char[95] = "POP     "; mod_rm_enc[95] = "0  ";
 
         /*
         * Opcode for RET
@@ -512,16 +521,20 @@ module Core (
                          * Case 209 : SHR r/m64, 1    ==> Shift Register r/m64 right by 1 bit     (Op/En : "M1")
                          * Case 211 : SHR r/m64, cl   ==> Shift Register r/m64 right by cl bits   (Op/En : "MC")
                          * 
-                         * If reg = 5, then 
-                         *       SHIFT Right 
-                         *   else if reg = 4
-                         *       SHIFT Left
+                         * If reg = 4, then 
+                         *       SHIFT Left 
+                         *   else if reg = 5
+                         *       SHIFT Right
                          */
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
                         space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
 
-                        regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
+                        if(modRM_byte.reg1 == 4)
+                            instr_buffer = {"SHL     "};
+                        else if(modRM_byte.reg1 == 5)
+                            instr_buffer = {"SHR     "};
+
                         rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
@@ -529,40 +542,28 @@ module Core (
                             imm_byte = decode_bytes[offset*8 +: 1*8]; 
                             space_buffer[(offset)*8 +: 1*8] = imm_byte;
                             offset += 1;
-                            if(modRM_byte.reg1 == 4)
-                                instr_buffer = {"SHL     "};
-                            else if(modRM_byte.reg1 == 5)
-                                instr_buffer = {"SHR     "};
                             reg_buffer = {{"$0x"}, {byte4_to_str(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
                         /* No Test Case for mod encode = M1 or MC */
                         else if (mod_rm_enc_byte == "M1 ") begin
-                            if(modRM_byte.reg1 == 4)
-                                instr_buffer = {"SHL     "};
-                            else if(modRM_byte.reg1 == 5)
-                                instr_buffer = {"SHR     "};
                             reg_buffer = {{"$0x01, "}, {reg_table_64[rmByte]}};
                         end
                         else if (mod_rm_enc_byte == "MC ") begin
-                            if(modRM_byte.reg1 == 4)
-                                instr_buffer = {"SHL     "};
-                            else if(modRM_byte.reg1 == 5)
-                                instr_buffer = {"SHR     "};
                             reg_buffer = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
                         end
                     end // End of Opcode for SHIFT Block
                     
                     else begin 
                         /*
-                         * General Handling of 1 byte Opcode Instructions
+                         * General Decode Logic for Instructions
                          */
-                        if(opcode == 15) begin
+                        if (opcode == 15) begin
                             /*
-                            * We have got a two byte opcode with REX prefix
-                            * Pretend as though nothing happened and over write the opcode
-                            * with the next byte. Now it appears to the program that only one opcode
-                            * occured
-                            */
+                             * We have got a two byte opcode with REX prefix
+                             * Pretend as though nothing happened and over write the opcode
+                             * with the next byte. Now it appears to the program that only one opcode
+                             * occured
+                             */
                             opcode = decode_bytes[offset*8 +: 1*8];
                             space_buffer[(offset)*8 +: 8] = opcode;
                             offset += 1;
@@ -572,7 +573,7 @@ module Core (
 
                         assert(mod_rm_enc_byte != 0) else $fatal;
 
-                        if (mod_rm_enc_byte != "D1 " && mod_rm_enc_byte != "D4 ") begin
+                        if (mod_rm_enc_byte != "XXX") begin
                             /*
                              * We have found a Mod R/M byte.
                              * The direction (source / destination is available in mod_rm_enc value")
@@ -815,7 +816,7 @@ module Core (
                         
                         instr_buffer = opcode_char[opcode];
                         
-                        if (disp_byte != 0 || short_disp_byte != 0)
+                        if (disp_byte != 0 || short_disp_byte != 0) begin
                             /*
                              * There is displacement
                              */
@@ -849,14 +850,14 @@ module Core (
                                                     {"("}, {reg_table_64[rmByte]}, {")"}};
                                 end
                             end
-
-                            else begin
-                                /*
-                                 * There is no displacement
-                                 */
-                                reg_buffer = {{reg_table_64[regByte]}, {", %fs:"}, {"("}, {reg_table_64[rmByte]}, {")"}};
-                            end
                         end
+                        else begin
+                            /*
+                             * There is no displacement
+                             */
+                            reg_buffer = {{reg_table_64[regByte]}, {", %fs:"}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                        end
+                    end
                 end
 
             end else begin
@@ -1107,7 +1108,7 @@ module Core (
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
                             reg_buffer = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
-                    else if (mod_rm_enc_byte == "O  ") begin
+                    else if (mod_rm_enc_byte == "0  ") begin
                         /*
                         * Should work for PUSH/POP
                         * Subtract 50 from the OPCODE. Check Table 3-1 in Intel manual.
