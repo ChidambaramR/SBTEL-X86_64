@@ -458,7 +458,7 @@ module Core (
    
             // Compute program address for next instruction
             prog_addr = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
-            $write("%x:      ", prog_addr);
+            $write("%s:       ", byte8_to_str(prog_addr));
 
             /*
              * Prefix decoding
@@ -1170,8 +1170,7 @@ module Core (
             end
             
             print_buffer(space_buffer, offset);
-            $write("%s     ",instr_buffer);
-            $write("%s     ",reg_buffer);
+            $write("%s%s", instr_buffer, reg_buffer);
             instr_buffer = str;
 
             if(opcode == 195) begin
