@@ -612,7 +612,7 @@ module Core (
                                             * The displacement value is SIGN extended
                                             */
                                             signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                            reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                            reg_buffer = {{reg_table_64[regByte]}, {", $0x"}, {byte_to_str(signed_disp_byte[0:31])}, {byte_to_str(signed_disp_byte[32:63])}, {"("}, {reg_table_64[rmByte]}, {")"}};
                                             //$write("%s, $0x%h(%s)",reg_table_64[regByte], signed_disp_byte, reg_table_64[rmByte]);
                                         end
                                     end
@@ -658,7 +658,7 @@ module Core (
                                             * The displacement value is sign extended
                                             */
                                             signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                                            reg_buffer = {{"$0x"}, {byte_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                                            reg_buffer = {{"$0x"}, {byte_to_str(signed_disp_byte[0:31])}, {byte_to_str(signed_disp_byte[32:63])}, {"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
                                             //$write("$0x%h(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
                                         end
                                     end
@@ -1019,7 +1019,7 @@ module Core (
                         
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
                         /* TODO: Need to handle this write into one of the buffers */
-                        $write("%x", modRM_byte);
+                        //$write("%x", modRM_byte);
                         offset += 1;
                         
                         /*
@@ -1049,7 +1049,7 @@ module Core (
                             if (modRM_byte.mod == 1) begin
                                 short_disp_byte = decode_bytes[offset*8 +: 1*8]; // Just to say that there is 0 displacement
                                 /* TODO: Need to handle this write into one of the buffers */
-                                $write(" %x", short_disp_byte);
+                                //$write(" %x", short_disp_byte);
                                 offset += 1;
                             end
                             else begin
@@ -1178,6 +1178,7 @@ module Core (
 
                 end
             end
+            //$write("byte count :%d", offset); 
             bytes_decoded_this_cycle =+ offset;
             
             //$write("buffer: %x hello",space_buffer);
