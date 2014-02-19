@@ -76,6 +76,14 @@ module Core (
          */
 
         /*
+        * Dont care opcode
+        * This is to avoid the check opcode_char[opcode] == str
+        * The logic is that, I need to force the code to enter that loop which
+        * is prevented by the above check.
+        */
+        opcode_char[15] = "XXXXXXXX";
+
+        /*
         * Opcodes for IMUL
         */
         opcode_char[175] = "IMUL    "; mod_rm_enc[175] = "RM "; // AF
@@ -99,6 +107,7 @@ module Core (
         opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
         opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
         opcode_char[184] = "MOV     "; mod_rm_enc[199] = "MI "; // B8
+        opcode_char[185] = "MOV     "; mod_rm_enc[199] = "MI "; // B8
         opcode_char[191] = "MOV     "; mod_rm_enc[199] = "MI "; // BF
         opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // C7
     
@@ -317,6 +326,7 @@ module Core (
         else if (opcode == 133) inst = "JNE     ";   // 0F 85
         else if (opcode == 141) inst = "JGE     ";   // 0F 8D
         else if (opcode == 143) inst = "JG      ";   // 0F 8F
+        else if (opcode == 175) inst = "IMUL    ";   // 0F AF
         else begin
             assert (0) else $fatal(1, "Invalid 2 byte Opcode");
         end
@@ -432,14 +442,8 @@ module Core (
                     /*
                      * ALL SPECIAL CASES GOES UPFRONT
                      */
-                    if (opcode == 15) begin
-                        /*
-                         * Currently 2 byte Opcode Instructions dont have a REX Prefix
-                         */
-                        assert(0) else $fatal;
-                    end
 
-                    else if ((opcode >= 80 && opcode <= 95)) begin
+                    if ((opcode >= 80 && opcode <= 95)) begin
                         /*
                          * Special case for PUSH/POP
                          * Refer to Table 3-1 of Intel Manual
@@ -484,6 +488,18 @@ module Core (
                          * General Handling of 1 byte Opcode Instructions
                          */
                         //$write("%x ",opcode);
+                        if(opcode == 15) begin
+                            /*
+                            * We have got a two byte opcode with REX prefix
+                            * Pretend as though nothing happened and over write the opcode
+                            * with the next byte. Now it appears to the program that only one opcode
+                            * occured
+                            */
+                            opcode = decode_bytes[offset*8 +: 1*8];
+                            space_buffer[(offset)*8 +: 8] = opcode;
+                            offset += 1;
+                        end
+
                         mod_rm_enc_byte = mod_rm_enc[opcode];
 
                         assert(mod_rm_enc_byte != 0) else $fatal;
@@ -512,7 +528,7 @@ module Core (
                                     //$write("           ");
                                     offset += 1;
                                 end 
-                                else begin
+                                else if (modRM_byte.mod == 2) begin
                                     disp_byte = decode_bytes[offset*8 +: 4*8];
                                     space_buffer[(offset)*8 +: 4*8] = disp_byte;
                                     //display_byte(disp_byte);
@@ -662,6 +678,13 @@ module Core (
                                             //$write("$0x%h(%s), %s",signed_disp_byte, reg_table_64[rmByte], reg_table_64[regByte]);
                                         end
                                     end
+                                end
+                                else begin
+                                    /*
+                                     * There is no displacement
+                                     */
+                                    //$write("%s, %s",reg_table_64[regByte], reg_table_64[rmByte]);
+                                  reg_buffer = {{reg_table_64[rmByte]},{", "},{reg_table_64[regByte]}};
                                 end
                             end
 
