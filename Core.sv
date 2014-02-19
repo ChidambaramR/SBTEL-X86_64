@@ -171,6 +171,11 @@ module Core (
         opcode_char[195] = "RETQ    ";
 
         /*
+        * Opcode for LEA
+        */
+        opcode_char[141] = "LEA     "; mod_rm_enc[141] = "RM ";
+        
+        /*
         * Opcode for NOP
         */
         opcode_char[144] = "NOP     ";
