@@ -9,7 +9,6 @@ module Core (
     logic[5:0] fetch_skip;
     logic[6:0] fetch_offset, decode_offset;
     
-    // Imp Data structures
     /*
      * This is the REX prefix
      */
@@ -26,15 +25,6 @@ module Core (
         logic [3:5] reg1;
         logic [0:2] rm; 
     } mod_rm;
-    
-    typedef struct packed {
-        logic [0 : 7] op_prefix;
-    } op_override;
-    
-    /*
-    Sample way to assign values
-    rex temp1 = {4'b0100, 1'b1, 1'b1, 1'b1, 1'b1};
-    */
     
     logic [0:255][0:2][0:7] mod_rm_enc;
     logic [0:255][0:7][0:7] opcode_char;
@@ -68,149 +58,156 @@ module Core (
          */
 
         /*
-        * Dont care opcode
-        * This is to avoid the check opcode_char[opcode] == str
-        * The logic is that, I need to force the code to enter that loop which
-        * is prevented by the above check.
-        */
+         * Dont care opcode
+         * This is to avoid the check opcode_char[opcode] == str
+         * The logic is that, I need to force the code to enter that loop which
+         * is prevented by the above check.
+         */
         opcode_char[15] = "XXXXXXXX";
 
         /*
-        * Opcodes for IMUL
-        */
-        opcode_char[175] = "IMUL    "; mod_rm_enc[175] = "RM "; // AF
+         * Opcodes for IMUL
+         */
+        opcode_char[175] = "imul    "; mod_rm_enc[175] = "RM "; // AF
         
         /*
          * Opcodes for XOR
          */
-        opcode_char [49] = "XOR     "; mod_rm_enc [49] = "MR "; // 31
+        opcode_char [49] = "xor     "; mod_rm_enc [49] = "MR "; // 31
 
         /*
          * Opcodes for AND
          */
-        opcode_char [32] = "AND     "; mod_rm_enc [32] = "MR "; // 20
-        opcode_char [33] = "AND     "; mod_rm_enc [33] = "MR "; // 21
-        opcode_char[129] = "AND     "; mod_rm_enc[129] = "MI "; // 81
-        opcode_char[131] = "AND     "; mod_rm_enc[131] = "MIS"; // 83
+        opcode_char [32] = "and     "; mod_rm_enc [32] = "MR "; // 20
+        opcode_char [33] = "and     "; mod_rm_enc [33] = "MR "; // 21
+        opcode_char[129] = "and     "; mod_rm_enc[129] = "MI "; // 81
+        opcode_char[131] = "and     "; mod_rm_enc[131] = "MIS"; // 83
          
         /*
          * Opcodes for MOV
          */
-        opcode_char[137] = "MOV     "; mod_rm_enc[137] = "MR "; // 89
-        opcode_char[139] = "MOV     "; mod_rm_enc[139] = "RM "; // 8B
-        opcode_char[199] = "MOV     "; mod_rm_enc[199] = "MI "; // C7
+        opcode_char[137] = "mov     "; mod_rm_enc[137] = "MR "; // 89
+        opcode_char[139] = "mov     "; mod_rm_enc[139] = "RM "; // 8B
+        opcode_char[199] = "mov     "; mod_rm_enc[199] = "MI "; // C7
 
         /* 
          * Special MOV Opcodes
          */
-        opcode_char[184] = "MOV     "; mod_rm_enc[184] = "SP "; // B8
-        opcode_char[185] = "MOV     "; mod_rm_enc[185] = "SP "; // B9
-        opcode_char[186] = "MOV     "; mod_rm_enc[196] = "SP "; // BA
-        opcode_char[187] = "MOV     "; mod_rm_enc[187] = "SP "; // BB
-        opcode_char[189] = "MOV     "; mod_rm_enc[188] = "SP "; // BC
-        opcode_char[190] = "MOV     "; mod_rm_enc[189] = "SP "; // BD
-        opcode_char[191] = "MOV     "; mod_rm_enc[190] = "SP "; // BE
-        opcode_char[191] = "MOV     "; mod_rm_enc[191] = "SP "; // BF
+        opcode_char[184] = "mov     "; mod_rm_enc[184] = "SP "; // B8
+        opcode_char[185] = "mov     "; mod_rm_enc[185] = "SP "; // B9
+        opcode_char[186] = "mov     "; mod_rm_enc[196] = "SP "; // BA
+        opcode_char[187] = "mov     "; mod_rm_enc[187] = "SP "; // BB
+        opcode_char[189] = "mov     "; mod_rm_enc[188] = "SP "; // BC
+        opcode_char[190] = "mov     "; mod_rm_enc[189] = "SP "; // BD
+        opcode_char[191] = "mov     "; mod_rm_enc[190] = "SP "; // BE
+        opcode_char[191] = "mov     "; mod_rm_enc[191] = "SP "; // BF
     
         /*
          * Opcodes for Instructions w/o REX Prefixes
          */
-        opcode_char[114] = "JB      "; mod_rm_enc[114] = "D1 "; // 72
-        opcode_char[232] = "CALLQ   "; mod_rm_enc[232] = "D4 "; // E8
-        opcode_char[233] = "JMPQ    "; mod_rm_enc[233] = "D4 "; // E9
-        opcode_char[235] = "JMP     "; mod_rm_enc[235] = "D1 "; // E9
-        opcode_char[255] = "CALLQ   "; mod_rm_enc[255] = "M  "; // FF 
+        opcode_char[114] = "jb      "; mod_rm_enc[114] = "D1 "; // 72
+        opcode_char[232] = "callq   "; mod_rm_enc[232] = "D4 "; // E8
+        opcode_char[233] = "jmpq    "; mod_rm_enc[233] = "D4 "; // E9
+        opcode_char[235] = "jmp     "; mod_rm_enc[235] = "D1 "; // E9
+        opcode_char[255] = "callq   "; mod_rm_enc[255] = "M  "; // FF 
         
         /*
          * Opcodes for Instructions w/o REX Prefixes and w/o MOD RM
          */
-        opcode_char[108] = "INSB    "; // 6C
-        opcode_char[111] = "OUTSL   "; // 6F
+        opcode_char[108] = "insb    "; // 6C
+        opcode_char[111] = "outsl   "; // 6F
 
         /*
-        * Opcodes for SUB
-        */
-        opcode_char [41] = "SUB     "; mod_rm_enc [41] = "MR " ; // 29
+         * Opcodes for SUB
+         */
+        opcode_char [41] = "sub     "; mod_rm_enc [41] = "MR " ; // 29
 
         /*
-        * Opcodes for CMP
-        */
-        opcode_char [57] = "CMP     "; mod_rm_enc [57] = "MR "; // 39
-        opcode_char [61] = "CMP     "; mod_rm_enc [61] = "XXX"; 
+         * Opcodes for CMP
+         */
+        opcode_char [57] = "cmp     "; mod_rm_enc [57] = "MR "; // 39
+        opcode_char [61] = "cmp     "; mod_rm_enc [61] = "XXX"; 
 
         /*
-        * Opcode for ADD
-        */
-        opcode_char  [1] = "ADD     "; mod_rm_enc  [1]  = "MR "; // 1
+         * Opcode for ADD
+         */
+        opcode_char  [1] = "add     "; mod_rm_enc  [1]  = "MR "; // 1
         
         /*
-        * Opcode for PUSH
-        */
-        opcode_char[80] = "PUSH    "; mod_rm_enc[80] = "0  ";
-        opcode_char[81] = "PUSH    "; mod_rm_enc[81] = "0  ";
-        opcode_char[82] = "PUSH    "; mod_rm_enc[82] = "0  ";
-        opcode_char[83] = "PUSH    "; mod_rm_enc[83] = "0  ";
-        opcode_char[84] = "PUSH    "; mod_rm_enc[84] = "0  ";
-        opcode_char[85] = "PUSH    "; mod_rm_enc[85] = "0  ";
-        opcode_char[86] = "PUSH    "; mod_rm_enc[86] = "0  ";
-        opcode_char[87] = "PUSH    "; mod_rm_enc[87] = "0  ";
+         * Opcode for PUSH
+         */
+        opcode_char [80] = "push    "; mod_rm_enc[80] = "O  ";
+        opcode_char [81] = "push    "; mod_rm_enc[81] = "O  ";
+        opcode_char [82] = "push    "; mod_rm_enc[82] = "O  ";
+        opcode_char [83] = "push    "; mod_rm_enc[83] = "O  ";
+        opcode_char [84] = "push    "; mod_rm_enc[84] = "O  ";
+        opcode_char [85] = "push    "; mod_rm_enc[85] = "O  ";
+        opcode_char [86] = "push    "; mod_rm_enc[86] = "O  ";
+        opcode_char [87] = "push    "; mod_rm_enc[87] = "O  ";
        
 
         /*
-        * Opcode for POP
-        */
-        opcode_char[88] = "POP     "; mod_rm_enc[88] = "0  ";
-        opcode_char[89] = "POP     "; mod_rm_enc[89] = "0  ";
-        opcode_char[90] = "POP     "; mod_rm_enc[90] = "0  ";
-        opcode_char[91] = "POP     "; mod_rm_enc[91] = "0  ";
-        opcode_char[92] = "POP     "; mod_rm_enc[92] = "0  ";
-        opcode_char[93] = "POP     "; mod_rm_enc[93] = "0  ";
-        opcode_char[94] = "POP     "; mod_rm_enc[94] = "0  ";
-        opcode_char[95] = "POP     "; mod_rm_enc[95] = "0  ";
+         * Opcode for POP
+         */
+        opcode_char [88] = "pop     "; mod_rm_enc[88] = "O  ";
+        opcode_char [89] = "pop     "; mod_rm_enc[89] = "O  ";
+        opcode_char [90] = "pop     "; mod_rm_enc[90] = "O  ";
+        opcode_char [91] = "pop     "; mod_rm_enc[91] = "O  ";
+        opcode_char [92] = "pop     "; mod_rm_enc[92] = "O  ";
+        opcode_char [93] = "pop     "; mod_rm_enc[93] = "O  ";
+        opcode_char [94] = "pop     "; mod_rm_enc[94] = "O  ";
+        opcode_char [95] = "pop     "; mod_rm_enc[95] = "O  ";
 
         /*
-        * Opcode for RET
-        */
-        opcode_char[195] = "RETQ    ";
+         * Opcode for RET
+         */
+        opcode_char[195] = "retq    ";
 
         /*
-        * Opcode for LEA
-        */
-        opcode_char[141] = "LEA     "; mod_rm_enc[141] = "RM ";
+         * Opcode for LEA
+         */
+        opcode_char[141] = "lea     "; mod_rm_enc[141] = "RM ";
         
         /*
-        * Opcode for SHL and SHR
-        */
-        opcode_char[193] = "SHR     "; mod_rm_enc[193] = "MI ";
-        opcode_char[209] = "SHR     "; mod_rm_enc[209] = "M1 ";
-        opcode_char[211] = "SHR     "; mod_rm_enc[211] = "MC ";
+         * Opcode for SHL and SHR
+         */
+        opcode_char[193] = "shr     "; mod_rm_enc[193] = "MI ";
+        opcode_char[209] = "shr     "; mod_rm_enc[209] = "M1 ";
+        opcode_char[211] = "shr     "; mod_rm_enc[211] = "MC ";
         
         /*
         * Opcode for TEST
         */
-        opcode_char[133] = "TEST    "; mod_rm_enc[133] = "MR ";
+        opcode_char[133] = "test    "; mod_rm_enc[133] = "MR ";
         
         /*
-        * Opcode for NOP
-        */
-        opcode_char[144] = "NOP     ";
+         * Opcode for NOP
+         */
+        opcode_char[144] = "nop     ";
 
         /*
-        * Shared OPCODE encoding. This block and the group block is taken from table
-        * A6 in Appendix A of intel manual.
+        * Opcode for TEST
         */
-        opcode_enc[1][0] = "ADD     ";
-        opcode_enc[1][1] = "OR      ";
-        opcode_enc[1][2] = "ADC     ";
-        opcode_enc[1][3] = "SBB     ";
-        opcode_enc[1][4] = "AND     ";
-        opcode_enc[1][5] = "SUB     ";
-        opcode_enc[1][6] = "XOR     ";
-        opcode_enc[1][7] = "CMP     ";
+        opcode_char[134] = "xchg    "; mod_rm_enc[134] = "O  ";
+        opcode_char[135] = "xchg    "; mod_rm_enc[135] = "O  ";
+        opcode_char[144] = "xchg    "; mod_rm_enc[144] = "O  ";
 
         /*
-        * Group of Shared opcode
-        */
+         * Shared OPCODE encoding. This block and the group block is taken from table
+         * A6 in Appendix A of intel manual.
+         */
+        opcode_enc[1][0] = "add     ";
+        opcode_enc[1][1] = "or      ";
+        opcode_enc[1][2] = "adc     ";
+        opcode_enc[1][3] = "sbb     ";
+        opcode_enc[1][4] = "and     ";
+        opcode_enc[1][5] = "sub     ";
+        opcode_enc[1][6] = "xor     ";
+        opcode_enc[1][7] = "cmp     ";
+
+        /*
+         * Group of Shared opcode
+         */
         opcode_group[128] = 1;
         opcode_group[129] = 1;
         opcode_group[130] = 1;
@@ -364,14 +361,28 @@ module Core (
     function logic[0 : 8*8-1] decode_2_byte_opcode (logic[0 : 7] opcode);
         logic[0 : 8*8-1] inst;
 
-        if (opcode == 5)        inst = "SYSCALL ";   // 0F 05
-        else if (opcode == 131) inst = "JAE     ";   // 0F 83
-        else if (opcode == 133) inst = "JNE     ";   // 0F 85
-        else if (opcode == 141) inst = "JGE     ";   // 0F 8D
-        else if (opcode == 143) inst = "JG      ";   // 0F 8F
-        else if (opcode == 175) inst = "IMUL    ";   // 0F AF
+        if (opcode == 5)        inst = "syscall ";   // 0F 05
+        else if (opcode == 31)  inst = "nopw    ";   // 0F 1F
+        else if (opcode == 128) inst = "jo      ";   // 0F 80
+        else if (opcode == 129) inst = "jno     ";   // 0F 81
+        else if (opcode == 130) inst = "jb      ";   // 0F 82
+        else if (opcode == 131) inst = "jae     ";   // 0F 83
+        else if (opcode == 132) inst = "je      ";   // 0F 84
+        else if (opcode == 133) inst = "jne     ";   // 0F 85
+        else if (opcode == 134) inst = "jbe     ";   // 0F 86
+        else if (opcode == 135) inst = "ja      ";   // 0F 87
+        else if (opcode == 136) inst = "js      ";   // 0F 88
+        else if (opcode == 137) inst = "jns     ";   // 0F 89
+        else if (opcode == 138) inst = "jpe     ";   // 0F 8A
+        else if (opcode == 139) inst = "jpo     ";   // 0F 8B
+        else if (opcode == 140) inst = "jl      ";   // 0F 8C
+        else if (opcode == 141) inst = "jge     ";   // 0F 8D
+        else if (opcode == 142) inst = "jle     ";   // 0F 8E
+        else if (opcode == 143) inst = "jg      ";   // 0F 8F
+        else if (opcode == 175) inst = "imul    ";   // 0F AF
         else begin
-            assert (0) else $fatal(1, "Invalid 2 byte Opcode");
+            assert(0) else $fatal(1, "Invalid 2 byte Opcode");
+            inst = "        ";  
         end
 
         decode_2_byte_opcode = inst;
@@ -428,7 +439,6 @@ module Core (
     logic[0 : 7] short_disp_byte;
     
     rex rex_prefix;
-    op_override op_ride;
     mod_rm modRM_byte;
 
     always_comb begin
@@ -470,7 +480,6 @@ module Core (
                 opcode = decode_bytes[offset*8 +: 1*8];
                 space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                
 
                 /* Check if next byte is in opcode table else jump to next instruction */ 
                 if (opcode_char[opcode] == str) begin
@@ -531,9 +540,9 @@ module Core (
                         offset += 1;
 
                         if(modRM_byte.reg1 == 4)
-                            instr_buffer = {"SHL     "};
+                            instr_buffer = {"shl     "};
                         else if(modRM_byte.reg1 == 5)
-                            instr_buffer = {"SHR     "};
+                            instr_buffer = {"shr     "};
 
                         rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
                         mod_rm_enc_byte = mod_rm_enc[opcode];
@@ -550,6 +559,9 @@ module Core (
                         end
                         else if (mod_rm_enc_byte == "MC ") begin
                             reg_buffer = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
+                        end
+                        else begin
+                            assert(0) else $fatal(1, "Invalid Mod RM Encoding for SHIFT");
                         end
                     end // End of Opcode for SHIFT Block
                     
@@ -748,15 +760,21 @@ module Core (
                     end 
                 end
             end else if (temp_prefix == 102) begin
-                op_ride = temp_prefix[0 : 7];
-                $display("Operand override = %x", op_ride);
+                /* TODO: Operand Override */
+                space_buffer[(offset)*8 +: 8] = temp_prefix[0 : 7];
                 offset += 1;
+
+                opcode = decode_bytes[offset*8 +: 1*8]; 
+                space_buffer[(offset)*8 +: 8] = opcode;
+                offset += 1;
+
+                instr_buffer = opcode_char[opcode];
             
             end else if (temp_prefix == 101) begin
                 /* GS Segment Override Prefix */
                 space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
-                instr_buffer = "GS      ";
+                instr_buffer = "gs      ";
 
             end else if (temp_prefix == 100) begin
                 /* FS Segment Override Prefix */
@@ -1102,21 +1120,21 @@ module Core (
 
                         else if(mod_rm_enc_byte == "MIS") begin
                             /*
-                            * Signed extension
-                            * Right now handling only 1 byte immediate to sign extension
-                            */
+                             * Signed extension
+                             * Right now handling only 1 byte immediate to sign extension
+                             */
                             signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
                             reg_buffer = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                         end
-                    else if (mod_rm_enc_byte == "0  ") begin
+                    else if (mod_rm_enc_byte == "O  ") begin
                         /*
-                        * Should work for PUSH/POP
-                        * Subtract 50 from the OPCODE. Check Table 3-1 in Intel manual.
-                        * 50 - Push RAX
-                        * 51 - Push RCX and so on.
-                        * So if we subtract 50 from 51, ans is 1. Now I will index this into 
-                        * reg_64_table. reg_table_64[1] = RCX
-                        */
+                         * Should work for PUSH/POP
+                         * Subtract 50 from the OPCODE. Check Table 3-1 in Intel manual.
+                         * 50 - Push RAX
+                         * 51 - Push RCX and so on.
+                         * So if we subtract 50 from 51, ans is 1. Now I will index this into 
+                         * reg_64_table. reg_table_64[1] = RCX
+                         */
                         instr_buffer = opcode_char[opcode];
                         if (opcode >= 88)
                               opcode = opcode - 8;
@@ -1158,10 +1176,10 @@ module Core (
 
             if(opcode == 195) begin
                 /*
-                * If RETQ appears, then leave a gap of three lines
-                */
-//                $display(" ");
-//                $display(" ");
+                 * If RETQ appears, then leave a gap of three lines
+                 */
+                //$display(" ");
+                //$display(" ");
             end
 
             bytes_decoded_this_cycle =+ offset;
