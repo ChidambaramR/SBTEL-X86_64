@@ -1160,8 +1160,8 @@ module Core (
                 /*
                 * If RETQ appears, then leave a gap of three lines
                 */
-                $display(" ");
-                $display(" ");
+//                $display(" ");
+//                $display(" ");
             end
 
             bytes_decoded_this_cycle =+ offset;
