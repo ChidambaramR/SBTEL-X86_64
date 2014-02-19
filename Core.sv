@@ -679,6 +679,13 @@ module Core (
                                         end
                                     end
                                 end
+                                else begin
+                                    /*
+                                     * There is no displacement
+                                     */
+                                    //$write("%s, %s",reg_table_64[regByte], reg_table_64[rmByte]);
+                                  reg_buffer = {{reg_table_64[rmByte]},{", "},{reg_table_64[regByte]}};
+                                end
                             end
 
                             else if (mod_rm_enc_byte == "MI ") begin
