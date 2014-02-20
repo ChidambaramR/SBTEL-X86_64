@@ -579,8 +579,8 @@ module Core (
                     space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
                     offset += 4;
 
-                    reg_buffer[0:191] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
-                                  {","}, {reg_table_64[opcode - 184]} };
+                    reg_buffer[0:199] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
+                                  {", "}, {reg_table_64[opcode - 184]} };
                     instr_buffer = opcode_char[opcode]; 
                 end // End of Opcode for Special MOV block
 
@@ -751,7 +751,7 @@ module Core (
                             /*
                              * There is no displacement and index register
                              */
-                            reg_buffer[0:63] = {{reg_table_64[rmByte]}, {reg_table_64[regByte]}};
+                            reg_buffer[0:79] = {{reg_table_64[rmByte]}, {", "}, {reg_table_64[regByte]}};
                         end
                         else if (disp_byte != 0) begin
                             /*
