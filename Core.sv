@@ -201,14 +201,14 @@ module Core (
         opcode_char[211] = "shr     "; opcode_enc[211] = "MC ";
         
         /*
-        * Opcode for TEST
-        */
+         * Opcode for TEST
+         */
         opcode_char[133] = "test    "; opcode_enc[133] = "MR ";
 
         /*
-        * Shared Opcode for XCHG/NOP
-        */
-        opcode_char[144] = "xchg    "; opcode_enc[144] = "XXX"; // 90
+         * Opcode for NOP
+         */
+        opcode_char[144] = "nop     "; opcode_enc[144] = "XXX"; // 90
 
         /*
          * Shared OPCODE encoding. This block and the group block is taken from table
@@ -527,323 +527,315 @@ module Core (
                 opcode_enc_byte = opcode_enc[temp_prefix];
             end
             opcode_enc_byte = 0;
-   
-            /*
-             * Opcode decoding
-             */
-            opcode = decode_bytes[offset*8 +: 1*8];
-            space_buffer[(offset)*8 +: 8] = opcode;
-            offset += 1;
 
-            /*
-             * ALL SPECIAL CASES GOES UPFRONT
-             */
-            if (opcode == 108) begin
-                /* INSB instruction */
-                instr_buffer = opcode_char[opcode];
-                reg_buffer[0:135] = {"(%dx), %es:(%rdi)"};
-         
-            end else if (opcode == 111) begin
-                /* OUTSB instruction */
-                instr_buffer = opcode_char[opcode];
-                reg_buffer[0:135] = {"%ds:(%rsi), (%dx)"};
-
-            end else if (opcode == 144) begin
+           /*
+            * For instructions with either a REX prefix OR No prefix Opcode decoding
+            */
+            if (rex_prefix != 0 || prefix == 0) begin
                 /*
-                 * If no prefix then
-                 *      NOP
-                 * else if prefix == 0x66
-                 *      XCHG %ax, %ax
+                 * Opcode decoding
                  */
-                if (prefix == 0) begin
-                    instr_buffer = "nop     ";
-                end else if (prefix == 102) begin
-                    instr_buffer = "xchg    ";
-                    reg_buffer[0:63] = {"%ax, %ax"};
-                end else begin
-                    assert(0) else $fatal(1, "Invalid Encoding for Opcode 0x90");
-                end
-
-            end else if ((opcode >= 80 && opcode <= 95)) begin
-                /*
-                 * Special case for PUSH/POP
-                 * Refer to Table 3-1 of Intel Manual
-                 */
-                instr_buffer = opcode_char[opcode];
-
-                if (opcode >= 88)
-                    opcode = opcode - 8;
-
-                opcode = opcode - 80;
-                reg_buffer[0:31] = reg_table_64[opcode];
-
-            end // End of Opcode for Special PUSH/POP block
-
-            else if ((opcode >= 184) && (opcode <= 191)) begin
-                /*
-                 * If the opcode is between B8 to BF, then it is 64 bit operand
-                 * Refer to section 2.2.1.5 of the manual
-                 */
-                high_byte = decode_bytes[offset*8 +: 4*8];
-                space_buffer[(offset)*8 +: 4*8] = byte_swap(high_byte);
-                offset += 4;
-                low_byte = decode_bytes[offset*8 +: 4*8];
-                space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
-                offset += 4;
-
-                reg_buffer[0:191] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
-                              {","}, {reg_table_64[opcode - 184]} };
-                instr_buffer = opcode_char[opcode]; 
-            end // End of Opcode for Special MOV block
-
-            else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
-                /*
-                 * SHIFT Left and Right Logic
-                 * Case 193 : SHR r/m64, imm8 ==> Shift Register r/m64 right by imm8 bits (Op/En : "MI")
-                 * Case 209 : SHR r/m64, 1    ==> Shift Register r/m64 right by 1 bit     (Op/En : "M1")
-                 * Case 211 : SHR r/m64, cl   ==> Shift Register r/m64 right by cl bits   (Op/En : "MC")
-                 * 
-                 * If reg = 4, then 
-                 *       SHIFT Left 
-                 *   else if reg = 5
-                 *       SHIFT Right
-                 */
-                modRM_byte = decode_bytes[offset*8 +: 1*8];
-                space_buffer[(offset)*8 +: 8] = modRM_byte;
+                opcode = decode_bytes[offset*8 +: 1*8];
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
 
-                if(modRM_byte.reg1 == 4)
-                    instr_buffer = {"shl     "};
-                else if(modRM_byte.reg1 == 5)
-                    instr_buffer = {"shr     "};
-
-                rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
-                opcode_enc_byte = opcode_enc[opcode];
-
-                if (opcode_enc_byte == "MI ") begin
-                    imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
-                    space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
-                    offset += 1;
-                    reg_buffer[0:87] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
-                end
-                /* No Test Case for mod encode = M1 or MC */
-                else if (opcode_enc_byte == "M1 ") begin
-                    reg_buffer[0:87] = {{"$0x01, "}, {reg_table_64[rmByte]}};
-                end
-                else if (opcode_enc_byte == "MC ") begin
-                    reg_buffer[0:71] = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
-                end
-                else begin
-                    assert(0) else $fatal(1, "Invalid Mod RM Encoding for SHIFT");
-                end
-            end // End of Opcode for SHIFT Block
-            
-            else begin 
                 /*
-                 * General Decode Logic for Instructions
+                 * ALL SPECIAL CASES GOES UPFRONT
                  */
-                if (opcode == 15) begin
-                    /*
-                     * We have got a two byte opcode. Pretend as though nothing happened and 
-                     * over write the opcode with the next byte. 
-                     * Now it appears to the program that only one byte opcode occured.
-                     */
-                    opcode = decode_bytes[offset*8 +: 1*8];
-                    space_buffer[(offset)*8 +: 8] = opcode;
-                    offset += 1;
-
-                    instr_buffer = decode_2_byte_opcode(opcode);
-
-                    // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
-                    if (opcode == 5)        // 0F 05 (syscall)
-                        opcode_enc_byte = "XXX";
-                    else if (opcode == 175) // 0F AF (imul)
-                        opcode_enc_byte = "RM ";
-                    else                    // 0F xx (jump inst)
-                        opcode_enc_byte = "D4 ";
-
-                end else begin
+                if (opcode == 108) begin
+                    /* INSB instruction */
                     instr_buffer = opcode_char[opcode];
-                    opcode_enc_byte = opcode_enc[opcode];
-                end
+                    reg_buffer[0:135] = {"(%dx), %es:(%rdi)"};
+             
+                end else if (opcode == 111) begin
+                    /* OUTSB instruction */
+                    instr_buffer = opcode_char[opcode];
+                    reg_buffer[0:135] = {"%ds:(%rsi), (%dx)"};
 
-                assert(opcode_enc_byte != 0) else $fatal;
-
-                if (opcode_enc_byte[0:7] == "M" || opcode_enc_byte[0:7] == "R") begin
+                end else if ((opcode >= 80 && opcode <= 95)) begin
                     /*
-                     * We have found a Mod R/M byte for MR, RM, M, MI, MIS
-                     * The direction (source / destination is available in opcode_enc value")
+                     * Special case for PUSH/POP
+                     * Refer to Table 3-1 of Intel Manual
+                     */
+                    instr_buffer = opcode_char[opcode];
+
+                    if (opcode >= 88)
+                        opcode = opcode - 8;
+
+                    opcode = opcode - 80;
+                    reg_buffer[0:31] = reg_table_64[opcode];
+
+                end // End of Opcode for Special PUSH/POP block
+
+                else if ((opcode >= 184) && (opcode <= 191)) begin
+                    /*
+                     * If the opcode is between B8 to BF, then it is 64 bit operand
+                     * Refer to section 2.2.1.5 of the manual
+                     */
+                    high_byte = decode_bytes[offset*8 +: 4*8];
+                    space_buffer[(offset)*8 +: 4*8] = byte_swap(high_byte);
+                    offset += 4;
+                    low_byte = decode_bytes[offset*8 +: 4*8];
+                    space_buffer[(offset)*8 +: 4*8] = byte_swap(low_byte);
+                    offset += 4;
+
+                    reg_buffer[0:191] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
+                                  {","}, {reg_table_64[opcode - 184]} };
+                    instr_buffer = opcode_char[opcode]; 
+                end // End of Opcode for Special MOV block
+
+                else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
+                    /*
+                     * SHIFT Left and Right Logic
+                     * Case 193 : SHR r/m64, imm8 ==> Shift Register r/m64 right by imm8 bits (Op/En : "MI")
+                     * Case 209 : SHR r/m64, 1    ==> Shift Register r/m64 right by 1 bit     (Op/En : "M1")
+                     * Case 211 : SHR r/m64, cl   ==> Shift Register r/m64 right by cl bits   (Op/En : "MC")
+                     * 
+                     * If reg = 4, then 
+                     *       SHIFT Left 
+                     *   else if reg = 5
+                     *       SHIFT Right
                      */
                     modRM_byte = decode_bytes[offset*8 +: 1*8];
                     space_buffer[(offset)*8 +: 8] = modRM_byte;
                     offset += 1;
-                    /*
-                     * Check if there is a displacement in the instruction
-                     * If mod bit == 0 and RM bit == 5, then 32 bit disp
-                     * If mod bit == 1 then 8 bit disp
-                     * If mod bit == 2 then 32 bit disp
-                     * If mod bit == 3 then No disp 
-                     */
-                    if ((modRM_byte.mod == 0 && modRM_byte.rm == 5) || modRM_byte.mod == 2) begin
-                        disp_byte = decode_bytes[offset*8 +: 4*8];
-                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
-                        offset += 4;
+
+                    if(modRM_byte.reg1 == 4)
+                        instr_buffer = {"shl     "};
+                    else if(modRM_byte.reg1 == 5)
+                        instr_buffer = {"shr     "};
+
+                    rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
+                    opcode_enc_byte = opcode_enc[opcode];
+
+                    if (opcode_enc_byte == "MI ") begin
+                        imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
+                        space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
+                        offset += 1;
+                        reg_buffer[0:87] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
                     end
-                    else if (modRM_byte.mod == 1) begin
+                    /* No Test Case for mod encode = M1 or MC */
+                    else if (opcode_enc_byte == "M1 ") begin
+                        reg_buffer[0:87] = {{"$0x01, "}, {reg_table_64[rmByte]}};
+                    end
+                    else if (opcode_enc_byte == "MC ") begin
+                        reg_buffer[0:71] = {{"%cl"}, {", "}, {reg_table_64[rmByte]}};
+                    end
+                    else begin
+                        assert(0) else $fatal(1, "Invalid Mod RM Encoding for SHIFT");
+                    end
+                end // End of Opcode for SHIFT Block
+                
+                else begin 
+                    /*
+                     * General Decode Logic for Instructions
+                     */
+                    if (opcode == 15) begin
+                        /*
+                         * We have got a two byte opcode. Pretend as though nothing happened and 
+                         * over write the opcode with the next byte. 
+                         * Now it appears to the program that only one byte opcode occured.
+                         */
+                        opcode = decode_bytes[offset*8 +: 1*8];
+                        space_buffer[(offset)*8 +: 8] = opcode;
+                        offset += 1;
+
+                        instr_buffer = decode_2_byte_opcode(opcode);
+
+                        // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
+                        if (opcode == 5)        // 0F 05 (syscall)
+                            opcode_enc_byte = "XXX";
+                        else if (opcode == 175) // 0F AF (imul)
+                            opcode_enc_byte = "RM ";
+                        else                    // 0F xx (jump inst)
+                            opcode_enc_byte = "D4 ";
+
+                    end else begin
+                        instr_buffer = opcode_char[opcode];
+                        opcode_enc_byte = opcode_enc[opcode];
+                    end
+
+                    assert(opcode_enc_byte != 0) else $fatal;
+
+                    if (opcode_enc_byte[0:7] == "M" || opcode_enc_byte[0:7] == "R") begin
+                        /*
+                         * We have found a Mod R/M byte for MR, RM, M, MI, MIS
+                         * The direction (source / destination is available in opcode_enc value")
+                         */
+                        modRM_byte = decode_bytes[offset*8 +: 1*8];
+                        space_buffer[(offset)*8 +: 8] = modRM_byte;
+                        offset += 1;
+                        /*
+                         * Check if there is a displacement in the instruction
+                         * If mod bit == 0 and RM bit == 5, then 32 bit disp
+                         * If mod bit == 1 then 8 bit disp
+                         * If mod bit == 2 then 32 bit disp
+                         * If mod bit == 3 then No disp 
+                         */
+                        if ((modRM_byte.mod == 0 && modRM_byte.rm == 5) || modRM_byte.mod == 2) begin
+                            disp_byte = decode_bytes[offset*8 +: 4*8];
+                            space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                            offset += 4;
+                        end
+                        else if (modRM_byte.mod == 1) begin
+                            short_disp_byte = decode_bytes[offset*8 +: 1*8];
+                            space_buffer[(offset)*8 +: 8] = short_disp_byte;
+                            offset += 1;
+                        end 
+
+                    end
+
+                    /*
+                     * PRINT CODE BLOCK
+                     * Depending on REX prefix, print the registers
+                     * !!! WARNING: Printing is done in reverse order to ensure
+                     *     readability. INTEL and GNU's ONJDUMP follow opposite
+                     *     syntax
+                     * If Op Encode(in instruction reference of the manual) is MR, it is in
+                     * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
+                     */
+                    regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
+                    rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
+
+                    if (rex_prefix != 0 && opcode >= 128 && opcode <= 131) begin
+                        // We might have a shared opcode 
+                        instr_buffer = shared_opcode[opcode_group[opcode]][regByte];
+                    end
+
+                    if (opcode_enc_byte == "M  ") begin
+                        // reg bits need to be 2
+                        assert(modRM_byte.reg1 == 2) else $fatal;
+                        reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
+                    end
+
+                    else if (opcode_enc_byte == "MR ") begin
+                        /*
+                         * Register addressing mode
+                         */ 
+                        if (modRM_byte.mod == 3) begin
+                            /*
+                             * There is no displacement and no index registers
+                             */
+                            reg_buffer[0:79] = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
+                        end
+                        else if (disp_byte != 0) begin
+                            /*
+                            * It is NOT sign extended. The displacement value is 32 bits
+                            */
+                            reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
+                                            {reg_table_64[rmByte]}, {")"}};
+                        end
+                        else if (short_disp_byte != 0) begin
+                            /*
+                            * The displacement value is SIGN extended
+                            */
+                            signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                            reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                            {"("}, {reg_table_64[rmByte]}, {")"}};
+                        end
+                        else begin
+                            /*
+                             * There is no displacement but only index registers
+                             */
+                            assert(modRM_byte.mod == 0) else $fatal;
+                            reg_buffer[0:95] = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                        end
+                    end
+
+                    else if (opcode_enc_byte == "RM ") begin
+                        /*
+                         * Register addressing mode
+                         * The direction of source and destination are interchanged
+                         */
+                        if (modRM_byte.mod == 3) begin
+                            /*
+                             * There is no displacement and index register
+                             */
+                            reg_buffer[0:63] = {{reg_table_64[rmByte]}, {reg_table_64[regByte]}};
+                        end
+                        else if (disp_byte != 0) begin
+                            /*
+                            * It is NOT sign extended. The displacement value is 32 bits
+                            */
+                            reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
+                                            {reg_table_64[regByte]}};
+                        end
+                        else if (short_disp_byte != 0) begin
+                            /*
+                            * The displacement value is SIGN extended
+                            */
+                            signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                            reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
+                                            {"), "}, {reg_table_64[regByte]}};
+                        end
+                        else begin
+                            /*
+                             * There is no displacement but only index registers
+                             */
+                            assert(modRM_byte.mod == 0) else $fatal;
+                            reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                        end
+                    end
+
+                    else if (opcode_enc_byte == "MI ") begin
+                        /*
+                         * Immediate addressing mode
+                         */
+                        imm_byte = decode_bytes[offset*8 +: 4*8]; 
+                        space_buffer[(offset)*8 +: 4*8] = imm_byte;
+                        offset += 4; // Assuming immediate values as 4. Correct?
+                        reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
+
+                        /*
+                        Dont know why I wrote this code. Keep it. Do not delete
+                        if (disp_byte != 0) begin
+                            $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
+                        end else begin
+                            $write("%s",reg_table_64[regByte]);
+                        end*/
+                    end
+
+                    else if (opcode_enc_byte == "MIS") begin
+                        /*
+                         * Signed extension
+                         * Right now handling only 1 byte immediate to sign extension
+                         */
+                        short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
+                        space_buffer[(offset)*8 +: 8] = short_imm_byte;
+                        offset += 1;
+                        signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                        reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                    end
+
+                    else if (opcode_enc_byte == "D1 ") begin
+                        /*
+                         * 1 byte relative displacement
+                         */
                         short_disp_byte = decode_bytes[offset*8 +: 1*8];
                         space_buffer[(offset)*8 +: 8] = short_disp_byte;
                         offset += 1;
-                    end 
+                        
+                        disp_byte = {24'b0, short_disp_byte};
+                        temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
+                        reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                    end
 
-                end
-
-                /*
-                 * PRINT CODE BLOCK
-                 * Depending on REX prefix, print the registers
-                 * !!! WARNING: Printing is done in reverse order to ensure
-                 *     readability. INTEL and GNU's ONJDUMP follow opposite
-                 *     syntax
-                 * If Op Encode(in instruction reference of the manual) is MR, it is in
-                 * the following format. Operand1: ModRM:r/m  Operand2: ModRM:reg (r) 
-                 */
-                regByte = {{rex_prefix.R}, {modRM_byte.reg1}};
-                rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
-
-                if (rex_prefix != 0 && opcode >= 128 && opcode <= 131) begin
-                    // We might have a shared opcode 
-                    instr_buffer = shared_opcode[opcode_group[opcode]][regByte];
-                end
-
-                if (opcode_enc_byte == "M  ") begin
-                    // reg bits need to be 2
-                    assert(modRM_byte.reg1 == 2) else $fatal;
-                    reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
-                end
-
-                else if (opcode_enc_byte == "MR ") begin
-                    /*
-                     * Register addressing mode
-                     */ 
-                    if (modRM_byte.mod == 3) begin
+                    else if (opcode_enc_byte == "D4 ") begin
                         /*
-                         * There is no displacement and no index registers
+                         * 4 byte relative displacement
                          */
-                        reg_buffer[0:79] = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
-                    end
-                    else if (disp_byte != 0) begin
-                        /*
-                        * It is NOT sign extended. The displacement value is 32 bits
-                        */
-                        reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
-                                        {reg_table_64[rmByte]}, {")"}};
-                    end
-                    else if (short_disp_byte != 0) begin
-                        /*
-                        * The displacement value is SIGN extended
-                        */
-                        signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                        reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
-                                        {"("}, {reg_table_64[rmByte]}, {")"}};
-                    end
-                    else begin
-                        /*
-                         * There is no displacement but only index registers
-                         */
-                        assert(modRM_byte.mod == 0) else $fatal;
-                        reg_buffer[0:95] = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                        disp_byte = decode_bytes[offset*8 +: 4*8];
+                        space_buffer[(offset)*8 +: 4*8] = disp_byte;
+                        offset += 4;
+     
+                        temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
+                        reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                     end
                 end
-
-                else if (opcode_enc_byte == "RM ") begin
-                    /*
-                     * Register addressing mode
-                     * The direction of source and destination are interchanged
-                     */
-                    if (modRM_byte.mod == 3) begin
-                        /*
-                         * There is no displacement and index register
-                         */
-                        reg_buffer[0:63] = {{reg_table_64[rmByte]}, {reg_table_64[regByte]}};
-                    end
-                    else if (disp_byte != 0) begin
-                        /*
-                        * It is NOT sign extended. The displacement value is 32 bits
-                        */
-                        reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
-                                        {reg_table_64[regByte]}};
-                    end
-                    else if (short_disp_byte != 0) begin
-                        /*
-                        * The displacement value is SIGN extended
-                        */
-                        signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                        reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
-                                        {"), "}, {reg_table_64[regByte]}};
-                    end
-                    else begin
-                        /*
-                         * There is no displacement but only index registers
-                         */
-                        assert(modRM_byte.mod == 0) else $fatal;
-                        reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
-                    end
-                end
-
-                else if (opcode_enc_byte == "MI ") begin
-                    /*
-                     * Immediate addressing mode
-                     */
-                    imm_byte = decode_bytes[offset*8 +: 4*8]; 
-                    space_buffer[(offset)*8 +: 4*8] = imm_byte;
-                    offset += 4; // Assuming immediate values as 4. Correct?
-                    reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
-
-                    /*
-                    Dont know why I wrote this code. Keep it. Do not delete
-                    if (disp_byte != 0) begin
-                        $write("$0x%x(%s)",byte_swap(disp_byte), reg_table_64[regByte]);
-                    end else begin
-                        $write("%s",reg_table_64[regByte]);
-                    end*/
-                end
-
-                else if (opcode_enc_byte == "MIS") begin
-                    /*
-                     * Signed extension
-                     * Right now handling only 1 byte immediate to sign extension
-                     */
-                    short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
-                    space_buffer[(offset)*8 +: 8] = short_imm_byte;
-                    offset += 1;
-                    signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
-                    reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
-                end
-
-                else if (opcode_enc_byte == "D1 ") begin
-                    /*
-                     * 1 byte relative displacement
-                     */
-                    short_disp_byte = decode_bytes[offset*8 +: 1*8];
-                    space_buffer[(offset)*8 +: 8] = short_disp_byte;
-                    offset += 1;
-                    
-                    disp_byte = {24'b0, short_disp_byte};
-                    temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
-                    reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
-                end
-
-                else if (opcode_enc_byte == "D4 ") begin
-                    /*
-                     * 4 byte relative displacement
-                     */
-                    disp_byte = decode_bytes[offset*8 +: 4*8];
-                    space_buffer[(offset)*8 +: 4*8] = disp_byte;
-                    offset += 4;
- 
-                    temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
-                    reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
-                end
-            end
+            end else begin
+                /* Dont need to support other Prefixes. Just printing out the prefix name */
+                instr_buffer = opcode_char[prefix];
+            end 
 
             print_prog_bytes(space_buffer, offset);
             $write("%s%s", instr_buffer, reg_buffer);
