@@ -454,7 +454,7 @@ module Core (
         for(ii = 0; ii < size; ii++) begin
             $write(" %x", prog_bytes[ii*8 +: 1*8]);
         end
-        for(ii = size; ii < 15; ii++) begin
+        for(ii = size; ii < 11; ii++) begin
             $write("   ");
         end
     endfunction
@@ -505,7 +505,8 @@ module Core (
    
             // Compute program address for next instruction
             prog_addr = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
-            $write("%s:       ", byte8_to_str(prog_addr));
+            //$write("%s:       ", byte8_to_str(prog_addr));
+            $write("  %0h:    ",prog_addr);
 
             /*
              * Prefix decoding
