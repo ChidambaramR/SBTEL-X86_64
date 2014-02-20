@@ -309,8 +309,8 @@ module Core (
         byte_swap = ret_val;
     endfunction
 
-    function logic[0 : 1*8-1] byte1_to_str(logic[0 : 1*8-1] inp);
-        logic[0:1*8-1] ret_val;
+    function logic[0 : 2*8-1] byte1_to_str(logic[0 : 1*8-1] inp);
+        logic[0:2*8-1] ret_val;
         logic[0:15][0:0][0:7] hextoa;
         logic[0:7] ii = 0;
         logic[0:7] ret_len = 0;
@@ -574,7 +574,7 @@ module Core (
                             imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
                             space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
                             offset += 1;
-                            reg_buffer[0:79] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:87] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
                         end
                         /* No Test Case for mod encode = M1 or MC */
                         else if (mod_rm_enc_byte == "M1 ") begin
@@ -1043,7 +1043,7 @@ module Core (
                                         /*
                                         * The displacement value is SIGN extended
                                         */
-                                        reg_buffer[0:119] = {{reg_table_8[regByte]}, {", 0x"}, {byte1_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
+                                        reg_buffer[0:127] = {{reg_table_8[regByte]}, {", 0x"}, {byte1_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
                                     end
                                 end
 
