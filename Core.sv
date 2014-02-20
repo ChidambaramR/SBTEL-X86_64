@@ -49,7 +49,7 @@ module Core (
         for (i = 0; i < 256; i++)
         begin
             opcode_char[i] = str;
-            mod_rm_enc[i] = 0;
+            mod_rm_enc[i] = "   ";
         end 
         /*
          * Following values are converted into decimal from hex.
@@ -64,6 +64,42 @@ module Core (
          * is prevented by the above check.
          */
         opcode_char[15] = "XXXXXXXX";
+
+        /*
+         * Prefixes: To distinguish with actual instruction opcodes, we set mod_rm_enc as "PRE"
+         */
+        opcode_char [38] = "es      "; mod_rm_enc [38] = "PRE"; // 26
+        opcode_char [46] = "cs      "; mod_rm_enc [46] = "PRE"; // 2E
+        opcode_char [54] = "ss      "; mod_rm_enc [54] = "PRE"; // 36
+        opcode_char [62] = "dd      "; mod_rm_enc [62] = "PRE"; // 3E
+        opcode_char[100] = "fs      "; mod_rm_enc[100] = "PRE"; // 64
+        opcode_char[101] = "gs      "; mod_rm_enc[101] = "PRE"; // 65
+        opcode_char[102] = "operand "; mod_rm_enc[102] = "PRE"; // 66
+        opcode_char[103] = "address "; mod_rm_enc[103] = "PRE"; // 67
+        opcode_char[240] = "lock    "; mod_rm_enc[240] = "PRE"; // F0
+        opcode_char[242] = "repne   "; mod_rm_enc[242] = "PRE"; // F2
+        opcode_char[243] = "repe    "; mod_rm_enc[243] = "PRE"; // F3
+
+        /*
+         * REX Prefixes: To distinguish with actual instruction opcodes, we set mod_rm_enc as "PRE"
+         */
+        opcode_char [64] = "rex     "; mod_rm_enc [64] = "PRE"; // 40
+        opcode_char [65] = "rex     "; mod_rm_enc [65] = "PRE"; // 41
+        opcode_char [66] = "rex     "; mod_rm_enc [66] = "PRE"; // 42
+        opcode_char [67] = "rex     "; mod_rm_enc [67] = "PRE"; // 43
+        opcode_char [68] = "rex     "; mod_rm_enc [68] = "PRE"; // 44
+        opcode_char [69] = "rex     "; mod_rm_enc [69] = "PRE"; // 45
+        opcode_char [70] = "rex     "; mod_rm_enc [70] = "PRE"; // 46
+        opcode_char [71] = "rex     "; mod_rm_enc [71] = "PRE"; // 47
+        opcode_char [72] = "rex     "; mod_rm_enc [72] = "PRE"; // 48
+        opcode_char [73] = "rex     "; mod_rm_enc [73] = "PRE"; // 49
+        opcode_char [74] = "rex     "; mod_rm_enc [74] = "PRE"; // 4A
+        opcode_char [75] = "rex     "; mod_rm_enc [75] = "PRE"; // 4B
+        opcode_char [76] = "rex     "; mod_rm_enc [76] = "PRE"; // 4C
+        opcode_char [77] = "rex     "; mod_rm_enc [77] = "PRE"; // 4D
+        opcode_char [78] = "rex     "; mod_rm_enc [78] = "PRE"; // 4E
+        opcode_char [79] = "rex     "; mod_rm_enc [79] = "PRE"; // 4F
+
 
         /*
          * Opcodes for IMUL
@@ -406,10 +442,13 @@ module Core (
         rel_to_abs_addr = abs_addr;
     endfunction
 
-    function print_buffer(logic[0 : 15*8-1] prog_counter, logic[0 : 3] size);
+    /*
+     * Print Program bytes 
+     */
+    function print_prog_bytes(logic[0 : 15*8-1] prog_bytes, logic[0 : 3] size);
         logic[0 : 3] i = 0;
         for(i = 0; i < size; i++) begin
-            $write(" %x", prog_counter[i*8 +: 1*8]);
+            $write(" %x", prog_bytes[i*8 +: 1*8]);
         end
         for(i = size; i < 15; i++) begin
             $write("   ");
@@ -420,8 +459,7 @@ module Core (
     logic[0 : 3] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
     logic[0 : 3] offset;
-    logic[0 : 1*8-1] temp_prefix;
-    logic[0 : 23] mod_rm_enc_byte; // It can store two chars. Eg MR / RM / MI etc
+    logic[0 : 23] mod_rm_enc_byte; // Store encoding for given opcode
     logic[0 : 4*8-1] disp_byte;
     logic[0 : 4*8-1] imm_byte;
     logic[0 : 3] regByte;
@@ -430,14 +468,16 @@ module Core (
     logic[0 : 4*8-1] low_byte;
 
     /*
-    * Signed immediate and displacement variable declaration. try to re-use these variables
-    */
+     * Signed immediate and displacement variable declaration. try to re-use these variables
+     */
     logic[0 : 63] signed_imm_byte;
     logic[0 : 7] short_imm_byte;
-    //logic next_instruction;
     logic[0 : 63] signed_disp_byte;
     logic[0 : 7] short_disp_byte;
     
+    logic[0 : 7][0 : 7] prefix_char;
+    logic[0 : 7] prefix;
+    logic[0 : 7] temp_prefix;
     rex rex_prefix;
     mod_rm modRM_byte;
 
@@ -452,6 +492,8 @@ module Core (
             short_disp_byte = 0;
             high_byte = 0;
             low_byte = 0;
+            rex_prefix = 0;
+            prefix = 0;
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
             end
@@ -464,16 +506,25 @@ module Core (
              * Prefix decoding
              */
             temp_prefix = decode_bytes[offset*8 +: 1*8];
+            mod_rm_enc_byte = mod_rm_enc[temp_prefix];
 
-            /*
-             * If the byte is between 0x40 and 0x4F, then it is REX prefix
-             * Below is the decimal equivalent check
-             */
-            if (temp_prefix >= 64 && temp_prefix <= 79) begin
-                rex_prefix = temp_prefix[0 : 7];
-                space_buffer[(offset)*8 +: 8] = (rex_prefix);
+            while (mod_rm_enc_byte == "PRE") begin
+                prefix = temp_prefix;
+                prefix_char = opcode_char[prefix];
+                if (prefix_char == "rex     ")
+                    rex_prefix = prefix;
+
+                //$write("\n%s %x\n", prefix_char, prefix);
+                space_buffer[(offset)*8 +: 8] = prefix;
                 offset += 1;
+
+                // Search if next byte is also a prefix
+                temp_prefix = decode_bytes[offset*8 +: 1*8];
+                mod_rm_enc_byte = mod_rm_enc[temp_prefix];
+            end
+            mod_rm_enc_byte = 0;
    
+            if (rex_prefix != 0) begin
                 /*
                  * Opcode decoding
                  */
@@ -489,7 +540,6 @@ module Core (
                     /*
                      * ALL SPECIAL CASES GOES UPFRONT
                      */
-
                     if ((opcode >= 80 && opcode <= 95)) begin
                         /*
                          * Special case for PUSH/POP
@@ -660,7 +710,6 @@ module Core (
                             // reg bits need to be 2
                             assert(modRM_byte.reg1 == 2) else $fatal;
 
-                            rmByte = {1'b0, {modRM_byte.rm}};
                             reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
                             instr_buffer = opcode_char[opcode];
                         end
@@ -759,28 +808,31 @@ module Core (
                         end
                     end 
                 end
-            end else if (temp_prefix == 102) begin
-                /* TODO: Operand Override */
-                space_buffer[(offset)*8 +: 8] = temp_prefix[0 : 7];
+            end else if (prefix == 46) begin
+                /* TODO: CS Override */
+                opcode = decode_bytes[offset*8 +: 1*8];
+                space_buffer[(offset)*8 +: 8] = opcode;
+                offset += 1; // 0F
+
+                opcode = decode_bytes[offset*8 +: 1*8];
+                space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
 
+                instr_buffer = decode_2_byte_opcode(opcode);
+            end else if (prefix == 102) begin
+                /* TODO: Operand Override */
                 opcode = decode_bytes[offset*8 +: 1*8]; 
                 space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
 
                 instr_buffer = opcode_char[opcode];
             
-            end else if (temp_prefix == 101) begin
+            end else if (prefix == 101) begin
                 /* GS Segment Override Prefix */
-                space_buffer[(offset)*8 +: 8] = opcode;
-                offset += 1;
-                instr_buffer = "gs      ";
+                instr_buffer = opcode_char[prefix]; 
 
-            end else if (temp_prefix == 100) begin
+            end else if (prefix == 100) begin
                 /* FS Segment Override Prefix */
-                rex_prefix = temp_prefix[0 : 7];
-                space_buffer[(offset)*8 +: 8] = rex_prefix;
-                offset += 1;
                 opcode = decode_bytes[offset*8 +: 1*8]; 
                 space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
@@ -1169,7 +1221,7 @@ module Core (
                 end
             end
             
-            print_buffer(space_buffer, offset);
+            print_prog_bytes(space_buffer, offset);
             $write("%s%s", instr_buffer, reg_buffer);
             instr_buffer = str;
 
