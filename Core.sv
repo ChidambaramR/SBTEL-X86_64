@@ -309,6 +309,29 @@ module Core (
         byte_swap = ret_val;
     endfunction
 
+    function logic[0 : 1*8-1] byte1_to_str(logic[0 : 1*8-1] inp);
+        logic[0:1*8-1] ret_val;
+        logic[0:15][0:0][0:7] hextoa;
+        logic[0:7] ii = 0;
+        logic[0:7] ret_len = 0;
+        
+        hextoa[0]  = 48; hextoa[1] = 49; hextoa[2] = 50; hextoa[3] = 51; hextoa[4] = 52; 
+        hextoa[5]  = 53; hextoa[6] = 54; hextoa[7] = 55; hextoa[8] = 56; hextoa[9] = 57;
+        hextoa[10] = 97; hextoa[11] = 98; hextoa[12] = 99; hextoa[13] = 100; hextoa[14] = 101; 
+        hextoa[15] = 102;
+
+        // Code to remove leading zeros
+        // while (ii < 8 && inp[ii*4 +: 4] == 0) ii++;
+
+        while (ii < 2) begin
+            ret_val[ret_len*8 +: 8] = hextoa[inp[ii*4 +: 4]];
+            ret_len++;
+            ii++;
+        end
+        
+        byte1_to_str = ret_val;
+    endfunction
+    
     function logic[0 : 8*8-1] byte4_to_str(logic[0 : 4*8-1] inp);
         logic[0:8*8-1] ret_val;
         logic[0:15][0:0][0:7] hextoa;
@@ -551,7 +574,7 @@ module Core (
                             imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
                             space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
                             offset += 1;
-                            reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                            reg_buffer[0:79] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
                         end
                         /* No Test Case for mod encode = M1 or MC */
                         else if (mod_rm_enc_byte == "M1 ") begin
@@ -889,13 +912,13 @@ module Core (
                 if (opcode == 108) begin
                     /* INSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    reg_buffer = {"(%dx), %es:(%rdi)"};
+                    reg_buffer[0:135] = {"(%dx), %es:(%rdi)"};
                     instr_buffer = opcode_char[opcode];
              
                 end else if (opcode == 111) begin
                     /* OUTSB instruction . No Prefix, No Mod RM */
                     opcode = decode_bytes[0 : 7];
-                    reg_buffer = {"%ds:(%rsi), (%dx)"};
+                    reg_buffer[0:135] = {"%ds:(%rsi), (%dx)"};
                     instr_buffer = opcode_char[opcode];
 
                 end else if (opcode == 195 || opcode == 144) begin
@@ -1020,7 +1043,7 @@ module Core (
                                         /*
                                         * The displacement value is SIGN extended
                                         */
-                                        reg_buffer[0:175] = {{reg_table_8[regByte]}, {", 0x"}, {byte4_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
+                                        reg_buffer[0:119] = {{reg_table_8[regByte]}, {", 0x"}, {byte1_to_str(short_disp_byte)}, {"("}, {reg_table_32[rmByte]}, {")"}};
                                     end
                                 end
 
