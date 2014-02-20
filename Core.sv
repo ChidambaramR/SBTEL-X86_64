@@ -331,8 +331,8 @@ module Core (
         byte_swap = ret_val;
     endfunction
 
-    function logic[0 : 1*8-1] byte1_to_str(logic[0 : 1*8-1] inp);
-        logic[0:1*8-1] ret_val;
+    function logic[0 : 2*8-1] byte1_to_str(logic[0 : 1*8-1] inp);
+        logic[0:2*8-1] ret_val;
         logic[0:15][0:0][0:7] hextoa;
         logic[0:7] ii = 0;
         logic[0:7] ret_len = 0;
@@ -621,7 +621,7 @@ module Core (
                         imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
                         space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
                         offset += 1;
-                        reg_buffer[0:79] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
+                        reg_buffer[0:87] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
                     end
                     /* No Test Case for mod encode = M1 or MC */
                     else if (mod_rm_enc_byte == "M1 ") begin
@@ -675,7 +675,6 @@ module Core (
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
                         space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
-   
                         /*
                          * Check if there is a displacement in the instruction
                          * If mod bit == 0 and RM bit == 5, then 32 bit disp
