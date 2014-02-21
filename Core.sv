@@ -48,6 +48,7 @@ module Core (
         begin
             opcode_char[i] = empty_str;
             opcode_enc[i] = "   ";
+            opcode_group[i] = 0;
         end 
         /*
          * Following values are converted into decimal from hex.
@@ -133,7 +134,7 @@ module Core (
         opcode_char[114] = "jb      "; opcode_enc[114] = "D1 "; // 72
         opcode_char[232] = "callq   "; opcode_enc[232] = "D4 "; // E8
         opcode_char[233] = "jmpq    "; opcode_enc[233] = "D4 "; // E9
-        opcode_char[235] = "jmp     "; opcode_enc[235] = "D1 "; // E9
+        opcode_char[235] = "jmp     "; opcode_enc[235] = "D1 "; // EB
         opcode_char[255] = "callq   "; opcode_enc[255] = "M  "; // FF 
         
         /*
@@ -428,13 +429,6 @@ module Core (
     endfunction
 
     /*
-     * Function to print a 4 byte number byte by byte
-     */
-    function void display_byte (logic[0 : 4*8-1] inp);
-        $write("%x %x %x %x", inp[0*8 : 1*8-1], inp[1*8 : 2*8-1], inp[2*8 : 3*8-1], inp[3*8 : 4*8-1]);
-    endfunction
-
-    /*
      * Function to compute absolute address given current program address, relative address and length of instruction
      */
     function logic[0 : 63] rel_to_abs_addr(logic[0 : 63] prog_counter, logic[0 : 31] rel_addr, logic[0 : 3] length);
@@ -445,9 +439,7 @@ module Core (
         rel_to_abs_addr = abs_addr;
     endfunction
 
-    /*
-     * Print Program bytes 
-     */
+    /* verilator lint_off UNDRIVEN */
     function print_prog_bytes(logic[0 : 15*8-1] prog_bytes, logic[0 : 3] size);
         logic[0 : 3] ii = 0;
         for(ii = 0; ii < size; ii++) begin
@@ -679,6 +671,9 @@ module Core (
                             space_buffer[(offset)*8 +: 8] = short_disp_byte;
                             offset += 1;
                         end 
+                        /*
+                         * RIP Addressing
+                         */
                         if ((modRM_byte.mod == 0 && modRM_byte.rm == 5))
                             rip_flag = 1;
                         else
@@ -729,14 +724,14 @@ module Core (
                             else begin
   
                                 if (modRM_byte.rm == 5) begin
-                                      /*
-                                      * This is a special case. For this very particular case, the value 0xffffff08
-                                      * is displayed as 0xffffffffffffff08. So extending and storing in the reg buffer here.
-                                      * I believe this is some of the OPCODE Exceptions.
-                                      */
-                                      signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
-                                      reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
-                                            {"("}, {reg_table_64[rmByte]}, {")"}};
+                                    /*
+                                     * This is a special case. For this very particular case, the value 0xffffff08
+                                     * is displayed as 0xffffffffffffff08. So extending and storing in the reg buffer here.
+                                     * I believe this is some of the OPCODE Exceptions.
+                                     */
+                                    signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
+                                    reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                        {"("}, {reg_table_64[rmByte]}, {")"}};
                                 end
 
                                 else begin
@@ -856,8 +851,8 @@ module Core (
                         short_disp_byte = decode_bytes[offset*8 +: 1*8];
                         space_buffer[(offset)*8 +: 8] = short_disp_byte;
                         offset += 1;
-                        
-                        disp_byte = {24'b0, short_disp_byte};
+                         
+                        disp_byte = {{24{short_disp_byte[0]}}, {short_disp_byte}};
                         temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                     end
