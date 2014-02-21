@@ -292,7 +292,6 @@ module Core (
                     fetch_skip <= fetch_skip - 8;
                 end else begin
                     decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
-                    //$display("fill at %d: %x [%x]", fetch_offset, bus.resp, decode_buffer);
                     fetch_offset <= fetch_offset + 8;
                 end
             end else begin
@@ -487,7 +486,6 @@ module Core (
 
     always_comb begin
         if (can_decode) begin : decode_block
-            $display(""); 
             // Variables which are to be reset for each new decoding
             offset = 0;
             opcode_enc_byte = 0;
@@ -505,8 +503,6 @@ module Core (
    
             // Compute program address for next instruction
             prog_addr = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
-            //$write("%s:       ", byte8_to_str(prog_addr));
-            $write("  %0h:    ",prog_addr);
 
             /*
              * Prefix decoding
@@ -883,8 +879,12 @@ module Core (
                 instr_buffer = opcode_char[prefix];
             end 
 
-            print_prog_bytes(space_buffer, offset);
-            $write("%s%s", instr_buffer, reg_buffer);
+            // Print Instruction Encoding for non empty opcode_char[] entries
+            if (instr_buffer != empty_str) begin
+                $write("  %0h:    ", prog_addr);
+                print_prog_bytes(space_buffer, offset);
+                $write("%s%s\n", instr_buffer, reg_buffer);
+            end
 
             bytes_decoded_this_cycle =+ offset;
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
