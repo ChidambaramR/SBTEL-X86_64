@@ -470,7 +470,7 @@ module Core (
     logic[0 : 3] rmByte;
     logic[0 : 4*8-1] high_byte;
     logic[0 : 4*8-1] low_byte;
-
+    logic rip_flag;
     /*
      * Signed immediate and displacement variable declaration. try to re-use these variables
      */
@@ -682,7 +682,10 @@ module Core (
                             space_buffer[(offset)*8 +: 8] = short_disp_byte;
                             offset += 1;
                         end 
-
+                        if ((modRM_byte.mod == 0 && modRM_byte.rm == 5))
+                            rip_flag = 1;
+                        else
+                            rip_flag = 0;
                     end
 
                     /*
@@ -722,7 +725,12 @@ module Core (
                             /*
                             * It is NOT sign extended. The displacement value is 32 bits
                             */
-                            reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
+                            if(rip_flag == 1) begin
+                                reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
+                                            {"%rip"}, {")"}};
+                            end
+                            else
+                                reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                             {reg_table_64[rmByte]}, {")"}};
                         end
                         else if (short_disp_byte != 0) begin
@@ -757,8 +765,13 @@ module Core (
                             /*
                             * It is NOT sign extended. The displacement value is 32 bits
                             */
-                            reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
+                            if(rip_flag == 1)
+                                reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {"%rip"}, {"), "},
                                             {reg_table_64[regByte]}};
+                            else
+                                reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
+                                            {reg_table_64[regByte]}};
+
                         end
                         else if (short_disp_byte != 0) begin
                             /*
@@ -773,7 +786,13 @@ module Core (
                              * There is no displacement but only index registers
                              */
                             assert(modRM_byte.mod == 0) else $fatal;
-                            reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                            if(rip_flag == 1)
+                            begin
+                                $write("Hell Sohil"); 
+                                reg_buffer[0:95] = {{"("}, {"%rip"}, {"), "}, {reg_table_64[regByte]}};
+                            end
+                            else
+                                reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
                         end
                     end
 
