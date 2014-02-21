@@ -787,10 +787,7 @@ module Core (
                              */
                             assert(modRM_byte.mod == 0) else $fatal;
                             if(rip_flag == 1)
-                            begin
-                                $write("Hell Sohil"); 
                                 reg_buffer[0:95] = {{"("}, {"%rip"}, {"), "}, {reg_table_64[regByte]}};
-                            end
                             else
                                 reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
                         end
