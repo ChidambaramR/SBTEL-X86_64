@@ -730,9 +730,25 @@ module Core (
                                 reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                             {"%rip"}, {")"}};
                             end
-                            else
-                                reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
+                            else begin
+  
+                                if (modRM_byte.rm == 5) begin
+                                      /*
+                                      * This is a special case. For this very particular case, the value 0xffffff08
+                                      * is displayed as 0xffffffffffffff08. So extending and storing in the reg buffer here.
+                                      * I believe this is some of the OPCODE Exceptions.
+                                      */
+                                      signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
+                                      reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                            {"("}, {reg_table_64[rmByte]}, {")"}};
+                                end
+
+                                else begin
+                                    reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                             {reg_table_64[rmByte]}, {")"}};
+                                end
+                            end
+
                         end
                         else if (short_disp_byte != 0) begin
                             /*
@@ -769,9 +785,22 @@ module Core (
                             if(rip_flag == 1)
                                 reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {"%rip"}, {"), "},
                                             {reg_table_64[regByte]}};
-                            else
-                                reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
+                            else begin
+                                if (modRM_byte.rm == 5) begin
+                                      /*
+                                      * This is a special case. For this very particular case, the value 0xffffff08
+                                      * is displayed as 0xffffffffffffff08. So extending and storing in the reg buffer here.
+                                      * I believe this is some of the OPCODE Exceptions.
+                                      */
+                                       signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
+                                       reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
+                                            {"), "}, {reg_table_64[regByte]}};
+                                end
+                                else begin
+                                      reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
                                             {reg_table_64[regByte]}};
+                                end
+                            end
 
                         end
                         else if (short_disp_byte != 0) begin
