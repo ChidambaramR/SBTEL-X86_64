@@ -8,7 +8,8 @@ module Core (
     logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
     logic[5:0] fetch_skip;
     logic[6:0] fetch_offset, decode_offset;
-    
+    logic[63:0] regfile[16];
+
     /*
      * This is the REX prefix
      */
@@ -41,6 +42,7 @@ module Core (
     logic [0:15*8-1] space_buffer;
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
+    logic can_execute;
     initial 
     begin
         
@@ -881,14 +883,26 @@ module Core (
                 $write("%s%s\n", instr_buffer, reg_buffer);
             end
 
+            can_execute = 1;
+            $write("Offset : %d",offset);
             bytes_decoded_this_cycle =+ offset;
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
         end else begin
             bytes_decoded_this_cycle = 0;
+            can_execute = 0;
         end
     end
-    
+   
+   logic andoutput;
+   logic a = 1, b = 1;
+    always_comb begin
+        if (can_execute) begin : execute_block
+            andoutput = a & b;
+            $write("And Output : %d",andoutput);
+    end
+    end
+
     always @ (posedge bus.clk) begin
         if (bus.reset) begin
             decode_offset <= 0;
