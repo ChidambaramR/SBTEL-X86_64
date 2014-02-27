@@ -8,7 +8,7 @@ module Core (
     logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
     logic[5:0] fetch_skip;
     logic[6:0] fetch_offset, decode_offset;
-    logic[63:0] regfile[16];
+    logic[0:63] regfile[0:16-1];
 
     /*
      * This is the REX prefix
@@ -32,6 +32,7 @@ module Core (
     logic [0:15][0:3][0:7] reg_table_64;
     logic [0:7][0:7]empty_str = {"       "};
     logic [0:8] i = 0;
+    logic [0:3] j = 0;
     logic [0:63] prog_addr;
     logic [0:63] temp_crr;
 
@@ -51,7 +52,12 @@ module Core (
             opcode_char[i] = empty_str;
             opcode_enc[i] = "   ";
             opcode_group[i] = 0;
-        end 
+        end
+
+        for (j = 0; j <= 14; j++) begin
+            $display("hello");
+            regfile[j] = {64{1'b0}};
+        end
         /*
          * Following values are converted into decimal from hex.
          * For example, 0x89 is the hex opcode. This is 137 in decimal
@@ -253,7 +259,7 @@ module Core (
         reg_table_64[13] = "%r13";
         reg_table_64[14] = "%r14";
         reg_table_64[15] = "%r15";
-    
+   
     end 
     
     function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -452,7 +458,33 @@ module Core (
         end
     endfunction
 
-    
+
+    /*
+    All definitions (state elements) for ALU goes here
+    */
+    /*
+    * Following is the pipeline register between decode and execute state
+    * It contains, PC+1, (8 bytes)
+                   REG A contents, (8 bytes)
+                   REG B contents, (8 bytes)
+                   Displacement values, (8 bytes)
+                   Immediate values, (8 bytes)
+                   Opcode value (1 byte)
+    */
+    logic[0 : (8*8-1)+(8*8-1)+(8*8-1)+(8*8-1)+(8*8-1)+(8-1)] IDEX; // PIPELINE REGISTER
+    logic[0 : 63] regA_contents;
+    logic[0 : 63] regB_contents;
+    logic[0 : 63] disp_contents;
+    logic[0 : 63] imm_contents;
+    logic[0 : 7] opcode_contents;
+    logic[0 : 7] idex_offset;
+
+    logic[0 : 4-1] regA; // 4 bit Register A INDEX for the ALU
+    logic[0 : 4-1] regB; // 4 bit Register B INDEX for the ALU
+
+    /*
+    All deifinitions (state elements) for DECODER goes here
+    */
     logic[0 : 3] bytes_decoded_this_cycle;
     logic[0 : 7] opcode;
     logic[0 : 3] offset;
@@ -527,6 +559,7 @@ module Core (
                  * Opcode decoding
                  */
                 opcode = decode_bytes[offset*8 +: 1*8];
+                opcode_contents = opcode; // This is for storing the value in the pipeline reg
                 space_buffer[(offset)*8 +: 8] = opcode;
                 offset += 1;
 
@@ -555,6 +588,8 @@ module Core (
 
                     opcode = opcode - 80;
                     reg_buffer[0:31] = reg_table_64[opcode];
+                    regA_contents = regfile[opcode[0:3]]; // Get the 8 byte register content and store in temp register
+                    regB_contents = {{64{1'b1}}};
 
                 end // End of Opcode for Special PUSH/POP block
 
@@ -573,6 +608,8 @@ module Core (
                     reg_buffer[0:199] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
                                   {", "}, {reg_table_64[opcode - 184]} };
                     instr_buffer = opcode_char[opcode]; 
+                    regA_contents = regfile[opcode - 184];
+                    regB_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
                 end // End of Opcode for Special MOV block
 
                 else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
@@ -824,6 +861,12 @@ module Core (
                         space_buffer[(offset)*8 +: 4*8] = imm_byte;
                         offset += 4; // Assuming immediate values as 4. Correct?
                         reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
+                        /*
+                        * This is to add into the pipeline register
+                        */
+                        imm_contents = {{32{1'b0}}, {imm_byte}};
+                        $display("imm = %0h",imm_contents);
+                        regB_contents = {64{1'b1}};
 
                         /*
                         Dont know why I wrote this code. Keep it. Do not delete
@@ -843,6 +886,13 @@ module Core (
                         space_buffer[(offset)*8 +: 8] = short_imm_byte;
                         offset += 1;
                         signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                        /*
+                        * This is to add into the pipeline register
+                        */
+                        imm_contents = signed_imm_byte;
+                        $display("imm2 = %0h",imm_contents);
+                        regB_contents = {64{1'b0}};
+                        $display("reg2 = %0h",regB_contents);
                         reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
                     end
 
@@ -884,7 +934,31 @@ module Core (
             end
 
             can_execute = 1;
-            $write("Offset : %d",offset);
+            idex_offset = 0;
+            IDEX[(idex_offset*8) +: 64] = {64{1'b1}};
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
+            IDEX[(idex_offset*8) +: 64] = regA_contents;
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
+            IDEX[(idex_offset*8) +: 64] = regB_contents;
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
+            IDEX[(idex_offset*8) +: 64] = disp_contents;
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
+            IDEX[(idex_offset*8) +: 64] = imm_contents;
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
+            IDEX[(idex_offset*8) +: 8] = opcode_contents;
+            idex_offset += 8;
+            $display("IDEX = %x",IDEX);
+
             bytes_decoded_this_cycle =+ offset;
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
@@ -898,6 +972,7 @@ module Core (
    logic a = 1, b = 1;
     always_comb begin
         if (can_execute) begin : execute_block
+            $display("IDEX = %0h, regA = %0h, regB = %0h",IDEX, regA, regB);
             andoutput = a & b;
             $write("And Output : %d",andoutput);
     end
@@ -914,21 +989,21 @@ module Core (
 
 	// cse502 : Use the following as a guide to print the Register File contents.
 	final begin
-		$display("RAX = %x", 0);
-		$display("RBX = %x", 0);
-		$display("RCX = %x", 0);
-		$display("RDX = %x", 0);
-		$display("RSI = %x", 0);
-		$display("RDI = %x", 0);
-		$display("RBP = %x", 0);
-		$display("RSP = %x", 0);
-		$display("R8 = %x", 0);
-		$display("R9 = %x", 0);
-		$display("R10 = %x", 0);
-		$display("R11 = %x", 0);
-		$display("R12 = %x", 0);
-		$display("R13 = %x", 0);
-		$display("R14 = %x", 0);
-		$display("R15 = %x", 0);
+		$display("RAX = %0h", regfile[0]);
+		$display("RBX = %0h", regfile[3]);
+		$display("RCX = %0h", regfile[1]);
+		$display("RDX = %0h", regfile[2]);
+		$display("RSI = %0h", regfile[6]);
+		$display("RDI = %0h", regfile[7]);
+		$display("RBP = %0h", regfile[5]);
+		$display("RSP = %0h", regfile[4]);
+		$display("R8 = %0h", regfile[8]);
+		$display("R9 = %0h", regfile[9]);
+		$display("R10 = %0h", regfile[10]);
+		$display("R11 = %0h", regfile[11]);
+		$display("R12 = %0h", regfile[12]);
+		$display("R13 = %0h", regfile[13]);
+		$display("R14 = %0h", regfile[14]);
+		$display("R15 = %0h", regfile[15]);
 	end
 endmodule
