@@ -55,7 +55,6 @@ module Core (
         end
 
         for (j = 0; j <= 14; j++) begin
-            $display("hello");
             regfile[j] = {64{1'b0}};
         end
         /*
@@ -471,7 +470,20 @@ module Core (
                    Immediate values, (8 bytes)
                    Opcode value (1 byte)
     */
-    logic[0 : (8*8-1)+(8*8-1)+(8*8-1)+(8*8-1)+(8*8-1)+(8-1)] IDEX; // PIPELINE REGISTER
+    
+    typedef struct packed {
+        logic [0:63] pc_contents;
+        logic [0:63] data_regA;
+        logic [0:63] data_regB;
+        logic [0:63] data_disp;
+        logic [0:63] data_imm;
+        logic [0:7]  ctl_opcode;
+        logic [0:3]  ctl_regByte;
+        logic [0:3]  ctl_rmByte;
+    } ID_EX;
+    
+
+//    logic[0 : (8*8)+(8*8)+(8*8)+(8*8)+(8*8)+(8-1)] IDEX; // PIPELINE REGISTER
     logic[0 : 63] regA_contents;
     logic[0 : 63] regB_contents;
     logic[0 : 63] disp_contents;
@@ -479,8 +491,8 @@ module Core (
     logic[0 : 7] opcode_contents;
     logic[0 : 7] idex_offset;
 
-    logic[0 : 4-1] regA; // 4 bit Register A INDEX for the ALU
-    logic[0 : 4-1] regB; // 4 bit Register B INDEX for the ALU
+    logic[0 : 4-1] regByte_contents; // 4 bit Register A INDEX for the ALU
+    logic[0 : 4-1] rmByte_contents; // 4 bit Register B INDEX for the ALU
 
     /*
     All deifinitions (state elements) for DECODER goes here
@@ -509,6 +521,7 @@ module Core (
     logic[0 : 7] temp_prefix;
     rex rex_prefix;
     mod_rm modRM_byte;
+    ID_EX idex;
 
     always_comb begin
         if (can_decode) begin : decode_block
@@ -861,12 +874,23 @@ module Core (
                         space_buffer[(offset)*8 +: 4*8] = imm_byte;
                         offset += 4; // Assuming immediate values as 4. Correct?
                         reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
+                        
+                        
                         /*
-                        * This is to add into the pipeline register
-                        */
+                         *
+                         * This is to add into the pipeline register
+                         * Immediate bytes present so regB_contents NA
+                         * Set pipeline regByte to bits 3, 4, 5 of MOD R/m for Group Encoding
+                         * Load register rmByte from Regfile into regA_contents
+                         * DO NOT USE regByte unless opcode is a shared opcode.
+                         */
+                        
                         imm_contents = {{32{1'b0}}, {imm_byte}};
-                        $display("imm = %0h",imm_contents);
-                        regB_contents = {64{1'b1}};
+                        imm_contents = {{byte_swap(imm_contents[0:31])}, {byte_swap(imm_contents[32:63])}};
+                        regB_contents = {64{1'b0}};
+                        regA_contents = regfile[rmByte];
+                        rmByte_contents = rmByte;
+                        regByte_contents = regByte; //{4{1'b0}};
 
                         /*
                         Dont know why I wrote this code. Keep it. Do not delete
@@ -882,18 +906,30 @@ module Core (
                          * Signed extension
                          * Right now handling only 1 byte immediate to sign extension
                          */
+
                         short_imm_byte = decode_bytes[offset*8 +: 1*8]; 
                         space_buffer[(offset)*8 +: 8] = short_imm_byte;
                         offset += 1;
                         signed_imm_byte = {{56{short_imm_byte[0]}}, {short_imm_byte}};
+                    
                         /*
-                        * This is to add into the pipeline register
-                        */
+                         *
+                         * This is to add into the pipeline register
+                         * Immediate bytes present so regB_contents NA
+                         * Set pipeline regByte to bits 3, 4, 5 of MOD R/m for Group Encoding
+                         * Load register rmByte from Regfile into regA_contents
+                         * DO NOT USE regByte unless opcode is a shared opcode.
+                         *
+                         */
+                         
                         imm_contents = signed_imm_byte;
-                        $display("imm2 = %0h",imm_contents);
                         regB_contents = {64{1'b0}};
-                        $display("reg2 = %0h",regB_contents);
                         reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
+                        regB_contents = {64{1'b0}};
+                        regA_contents = regfile[rmByte];
+                        rmByte_contents = rmByte;
+                        regByte_contents = regByte;
+                    
                     end
 
                     else if (opcode_enc_byte == "D1 ") begin
@@ -933,38 +969,13 @@ module Core (
                 $write("%s%s\n", instr_buffer, reg_buffer);
             end
 
-            can_execute = 1;
-            idex_offset = 0;
-            IDEX[(idex_offset*8) +: 64] = {64{1'b1}};
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
-            IDEX[(idex_offset*8) +: 64] = regA_contents;
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
-            IDEX[(idex_offset*8) +: 64] = regB_contents;
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
-            IDEX[(idex_offset*8) +: 64] = disp_contents;
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
-            IDEX[(idex_offset*8) +: 64] = imm_contents;
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
-            IDEX[(idex_offset*8) +: 8] = opcode_contents;
-            idex_offset += 8;
-            $display("IDEX = %x",IDEX);
-
+            
             bytes_decoded_this_cycle =+ offset;
             if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
 
         end else begin
             bytes_decoded_this_cycle = 0;
-            can_execute = 0;
+            //can_execute = 0;
         end
     end
    
@@ -972,9 +983,19 @@ module Core (
    logic a = 1, b = 1;
     always_comb begin
         if (can_execute) begin : execute_block
-            $display("IDEX = %0h, regA = %0h, regB = %0h",IDEX, regA, regB);
+            if(idex.ctl_opcode == 199)          //   Mov Imm 
+                regfile[idex.ctl_rmByte] = idex.data_imm;
+
+            if(opcode_group[idex.ctl_opcode] != 0)
+                begin
+                if(idex.ctl_regByte == 4)
+                    begin
+                    //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
+                    regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
+                end
+                end
+            //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
             andoutput = a & b;
-            $write("And Output : %d",andoutput);
     end
     end
 
@@ -984,6 +1005,17 @@ module Core (
             decode_buffer <= 0;
         end else begin // !bus.reset
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
+            can_execute <= 1;
+            
+            idex.pc_contents <= prog_addr;
+            idex.data_regA <= regA_contents;
+            idex.data_regB <= regB_contents;
+            idex.data_disp <= disp_contents;
+            idex.data_imm <= imm_contents;
+            idex.ctl_opcode <= opcode_contents;
+            idex.ctl_rmByte <= rmByte_contents;
+            idex.ctl_regByte <= regByte_contents;
+            //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
         end
     end
 
