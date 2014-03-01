@@ -103,6 +103,12 @@ module Core (
         opcode_char [78] = "rex     "; opcode_enc [78] = "PRE"; // 4E
         opcode_char [79] = "rex     "; opcode_enc [79] = "PRE"; // 4F
 
+
+        /*
+        * Opcodes for OR
+        */
+        opcode_char [13] = "or      "; opcode_enc [13] = "I  ";
+        opcode_char [9] = "or      "; opcode_enc [9] = "MR ";
         /*
          * Opcodes for XOR
          */
@@ -491,7 +497,6 @@ module Core (
     logic[0 : 63] disp_contents;
     logic[0 : 63] imm_contents;
     logic[0 : 7] opcode_contents;
-    logic[0 : 7] idex_offset;
 
     logic[0 : 4-1] regByte_contents; // 4 bit Register A INDEX for the ALU
     logic[0 : 4-1] rmByte_contents; // 4 bit Register B INDEX for the ALU
@@ -585,6 +590,20 @@ module Core (
                 /*
                  * ALL SPECIAL CASES GOES UPFRONT
                  */
+                if (opcode == 13) begin
+                    /* Special case for OR instruction */
+                    imm_byte = decode_bytes[offset*8 +: 4*8]; 
+                    space_buffer[(offset)*8 +: 4*8] = imm_byte;
+                    offset += 4; // Assuming immediate values as 4. Correct?
+                    reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[0]}};
+                  
+                    imm_contents = {{32{1'b0}}, {imm_byte}};
+                    imm_contents = {{byte_swap(imm_contents[0:31])}, {byte_swap(imm_contents[32:63])}};
+                    regB_contents = {64{1'b0}};
+                    regA_contents = regfile[0]; // Statically assigning 0 because it is RAX for opcode 13
+                    rmByte_contents = 0;
+                    regByte_contents = 0; //{4{1'b0}};
+                end
                 if (opcode == 108) begin
                     /* INSB instruction */
                     instr_buffer = opcode_char[opcode];
@@ -628,7 +647,10 @@ module Core (
                                   {", "}, {reg_table_64[opcode - 184]} };
                     instr_buffer = opcode_char[opcode]; 
                     regA_contents = regfile[opcode - 184];
-                    regB_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
+                    regB_contents = {64{1'b1}};
+                    imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
+                    rmByte_contents = opcode - 184;
+                    regByte_contents = 0;
                 end // End of Opcode for Special MOV block
 
                 else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
@@ -985,23 +1007,32 @@ module Core (
         end
     end
    
-   logic andoutput;
-   logic a = 1, b = 1;
     always_comb begin
         if (can_execute) begin : execute_block
-            if(idex.ctl_opcode == 199)          //   Mov Imm 
+            if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191))          //   Mov Imm 
                 regfile[idex.ctl_rmByte] = idex.data_imm;
 
-            if(opcode_group[idex.ctl_opcode] != 0)
-                begin
-                if(idex.ctl_regByte == 4)
-                    begin
+            if(opcode_group[idex.ctl_opcode] != 0) begin
+                if(idex.ctl_regByte == 4) begin
                     //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
                     regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
                 end
+                else if(idex.ctl_regByte == 1) begin
+                    regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
                 end
+            end
+
+            if (idex.ctl_opcode == 13) begin
+                // OR
+                regfile[0] = idex.data_imm | idex.data_regA;
+            end
+
+            if (idex.ctl_opcode == 9) begin
+                $write("Oring between %x and %x",regfile[idex.ctl_rmByte],regfile[idex.ctl_regByte]);
+                regfile[idex.ctl_rmByte] = regfile[idex.ctl_rmByte] | regfile[idex.ctl_regByte];
+                $write("OR Result = %x",regfile[idex.ctl_rmByte]);
+            end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
-            andoutput = a & b;
     end
     end
 
@@ -1013,19 +1044,20 @@ module Core (
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
             //if(bytes_decoded_this_cycle != 0) begin
             //    can_execute <= 1;
-                if(can_decode)
+                if(can_decode) begin
+                    idex.pc_contents <= prog_addr;
+                    idex.data_regA <= regA_contents;
+                    idex.data_regB <= regB_contents;
+                    idex.data_disp <= disp_contents;
+                    idex.data_imm <= imm_contents;
+                    idex.ctl_opcode <= opcode_contents;
+                    idex.ctl_rmByte <= rmByte_contents;
+                    idex.ctl_regByte <= regByte_contents;
                     can_execute <= 1;
+                end
                 else
                     can_execute <= 0;
                     
-                idex.pc_contents <= prog_addr;
-                idex.data_regA <= regA_contents;
-                idex.data_regB <= regB_contents;
-                idex.data_disp <= disp_contents;
-                idex.data_imm <= imm_contents;
-                idex.ctl_opcode <= opcode_contents;
-                idex.ctl_rmByte <= rmByte_contents;
-                idex.ctl_regByte <= regByte_contents;
             //end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
         end
@@ -1033,9 +1065,9 @@ module Core (
 
 	// cse502 : Use the following as a guide to print the Register File contents.
 	final begin
-		$display("RAX = %0h", regfile[0]);
-		$display("RBX = %0h", regfile[3]);
-		$display("RCX = %0h", regfile[1]);
+		$display("RAX = %x", regfile[0]);
+		$display("RBX = %x", regfile[3]);
+		$display("RCX = %x", regfile[1]);
 		$display("RDX = %0h", regfile[2]);
 		$display("RSI = %0h", regfile[6]);
 		$display("RDI = %0h", regfile[7]);
