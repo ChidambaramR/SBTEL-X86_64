@@ -551,6 +551,10 @@ module Core (
             temp_prefix = decode_bytes[offset*8 +: 1*8];
             opcode_enc_byte = opcode_enc[temp_prefix];
 
+            if(temp_prefix == 0) begin
+                offset += 10;
+            end
+
             while (opcode_enc_byte == "PRE") begin
                 prefix = temp_prefix;
                 prefix_char = opcode_char[prefix];
@@ -972,7 +976,7 @@ module Core (
 
             bytes_decoded_this_cycle =+ offset;
             //can_execute = 1;
-            if (decode_bytes == 0 && fetch_state == fetch_idle)
+            if (decode_bytes == 0 && fetch_state == fetch_idle && can_decode == 0)
                 $finish;
 
         end else begin
@@ -1011,6 +1015,8 @@ module Core (
             //    can_execute <= 1;
                 if(can_decode)
                     can_execute <= 1;
+                else
+                    can_execute <= 0;
                     
                 idex.pc_contents <= prog_addr;
                 idex.data_regA <= regA_contents;
