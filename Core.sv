@@ -317,7 +317,9 @@ module Core (
     wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
     wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
     wire can_decode = (fetch_offset - decode_offset >= 7'd15);
-    
+//                if (decode_bytes == 0 && fetch_state == fetch_idle)
+//                  can_decode = 0;
+     
     function logic opcode_inside(logic[7:0] value, low, high);
         opcode_inside = (value >= low && value <= high);
     endfunction
@@ -875,7 +877,6 @@ module Core (
                         offset += 4; // Assuming immediate values as 4. Correct?
                         reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[rmByte]}};
                         
-                        
                         /*
                          *
                          * This is to add into the pipeline register
@@ -969,9 +970,10 @@ module Core (
                 $write("%s%s\n", instr_buffer, reg_buffer);
             end
 
-            
             bytes_decoded_this_cycle =+ offset;
-            if (decode_bytes == 0 && fetch_state == fetch_idle) $finish;
+            //can_execute = 1;
+            if (decode_bytes == 0 && fetch_state == fetch_idle)
+                $finish;
 
         end else begin
             bytes_decoded_this_cycle = 0;
@@ -1005,16 +1007,20 @@ module Core (
             decode_buffer <= 0;
         end else begin // !bus.reset
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
-            can_execute <= 1;
-            
-            idex.pc_contents <= prog_addr;
-            idex.data_regA <= regA_contents;
-            idex.data_regB <= regB_contents;
-            idex.data_disp <= disp_contents;
-            idex.data_imm <= imm_contents;
-            idex.ctl_opcode <= opcode_contents;
-            idex.ctl_rmByte <= rmByte_contents;
-            idex.ctl_regByte <= regByte_contents;
+            //if(bytes_decoded_this_cycle != 0) begin
+            //    can_execute <= 1;
+                if(can_decode)
+                    can_execute <= 1;
+                    
+                idex.pc_contents <= prog_addr;
+                idex.data_regA <= regA_contents;
+                idex.data_regB <= regB_contents;
+                idex.data_disp <= disp_contents;
+                idex.data_imm <= imm_contents;
+                idex.ctl_opcode <= opcode_contents;
+                idex.ctl_rmByte <= rmByte_contents;
+                idex.ctl_regByte <= regByte_contents;
+            //end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
         end
     end

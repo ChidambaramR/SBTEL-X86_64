@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 	tfp = new VerilatedVcdC;
 	assert(tfp);
 	top.trace (tfp, 99);	// Trace 99 levels of hierarchy
-	tfp->spTrace()->set_time_resolution("1 ps");
+	tfp->spTrace()->set_time_resolution("1 ns");
 	tfp->open ("../trace.vcd");	// Open the dump file
 #endif
 
