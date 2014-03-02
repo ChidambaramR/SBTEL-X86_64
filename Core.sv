@@ -792,6 +792,11 @@ module Core (
                              * There is no displacement and no index registers
                              */
                             reg_buffer[0:79] = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
+                            regByte_contents = regByte;
+                            rmByte_contents = rmByte;
+                            regA_contents = regfile[regByte];
+                            regB_contents = regfile[rmByte];
+                            imm_contents = {64{1'b0}};
                         end
                         else if (disp_byte != 0) begin
                             /*
@@ -1007,6 +1012,7 @@ module Core (
         end
     end
    
+    logic [0:63] temp;
     always_comb begin
         if (can_execute) begin : execute_block
             if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191))          //   Mov Imm 
@@ -1029,8 +1035,15 @@ module Core (
 
             if (idex.ctl_opcode == 9) begin
                 $write("Oring between %x and %x",regfile[idex.ctl_rmByte],regfile[idex.ctl_regByte]);
-                regfile[idex.ctl_rmByte] = regfile[idex.ctl_rmByte] | regfile[idex.ctl_regByte];
-                $write("OR Result = %x",regfile[idex.ctl_rmByte]);
+                temp = regfile[idex.ctl_rmByte] | regfile[idex.ctl_regByte];
+                temp = idex.data_regA | idex.data_regB;
+                regfile[idex.ctl_rmByte] = temp;
+                $write("OR Result = %x, regByte = %x, rmByte = %x",regfile[idex.ctl_rmByte], idex.ctl_regByte, idex.ctl_rmByte);
+                $display("reg1 = %s reg2 = %s", reg_table_64[idex.ctl_rmByte], reg_table_64[idex.ctl_regByte]);
+		$display("RAX = %x", regfile[0]);
+		$display("RBX = %x", regfile[3]);
+		$display("RCX = %x", regfile[1]);
+		$display("RDX = %0h", regfile[2]);
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
     end
