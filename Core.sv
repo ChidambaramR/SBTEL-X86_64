@@ -105,10 +105,15 @@ module Core (
 
 
         /*
+        * Opcodes for AND
+        */
+        opcode_char [1] = "add     ";  opcode_enc [1] = "MR ";
+
+        /*
         * Opcodes for OR
         */
         opcode_char [13] = "or      "; opcode_enc [13] = "I  ";
-        opcode_char [9] = "or      "; opcode_enc [9] = "MR ";
+        opcode_char [9] = "or      ";  opcode_enc [9] = "MR ";
         /*
          * Opcodes for XOR
          */
@@ -266,7 +271,27 @@ module Core (
         reg_table_64[15] = "%r15";
    
     end 
+   
+    function void disp_reg_file();
+		$display("RAX = %x", regfile[0]);
+		$display("RBX = %x", regfile[3]);
+		$display("RCX = %x", regfile[1]);
+		$display("RDX = %0h", regfile[2]);
+		$display("RSI = %0h", regfile[6]);
+		$display("RDI = %0h", regfile[7]);
+		$display("RBP = %0h", regfile[5]);
+		$display("RSP = %0h", regfile[4]);
+		$display("R8 = %0h", regfile[8]);
+		$display("R9 = %0h", regfile[9]);
+		$display("R10 = %0h", regfile[10]);
+		$display("R11 = %0h", regfile[11]);
+		$display("R12 = %0h", regfile[12]);
+		$display("R13 = %0h", regfile[13]);
+		$display("R14 = %0h", regfile[14]);
+		$display("R15 = %0h", regfile[15]);
     
+    endfunction 
+
     function logic mtrr_is_mmio(logic[63:0] physaddr);
         mtrr_is_mmio = ((physaddr > 640*1024 && physaddr < 1024*1024));
     endfunction
@@ -853,6 +878,11 @@ module Core (
                              * There is no displacement and index register
                              */
                             reg_buffer[0:79] = {{reg_table_64[rmByte]}, {", "}, {reg_table_64[regByte]}};
+                            regByte_contents = regByte;
+                            rmByte_contents = rmByte;
+                            regA_contents = regfile[regByte];
+                            regB_contents = regfile[rmByte];
+                            imm_contents = {64{1'b0}};
                         end
                         else if (disp_byte != 0) begin
                             /*
@@ -1018,6 +1048,11 @@ module Core (
             if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191))          //   Mov Imm 
                 regfile[idex.ctl_rmByte] = idex.data_imm;
 
+            if(idex.ctl_opcode == 137) begin // Move reg to reg
+                temp = regfile[idex.ctl_regByte];
+                regfile[idex.ctl_rmByte] = temp;
+            end
+
             if(opcode_group[idex.ctl_opcode] != 0) begin
                 if(idex.ctl_regByte == 4) begin
                     //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
@@ -1029,21 +1064,20 @@ module Core (
             end
 
             if (idex.ctl_opcode == 13) begin
-                // OR
+                // OR instruction with immediate operands
                 regfile[0] = idex.data_imm | idex.data_regA;
             end
 
-            if (idex.ctl_opcode == 9) begin
-                $write("Oring between %x and %x",regfile[idex.ctl_rmByte],regfile[idex.ctl_regByte]);
-                temp = regfile[idex.ctl_rmByte] | regfile[idex.ctl_regByte];
+            if (idex.ctl_opcode == 9 ) begin
+                // OR instruction with reg operands 
                 temp = idex.data_regA | idex.data_regB;
                 regfile[idex.ctl_rmByte] = temp;
-                $write("OR Result = %x, regByte = %x, rmByte = %x",regfile[idex.ctl_rmByte], idex.ctl_regByte, idex.ctl_rmByte);
-                $display("reg1 = %s reg2 = %s", reg_table_64[idex.ctl_rmByte], reg_table_64[idex.ctl_regByte]);
-		$display("RAX = %x", regfile[0]);
-		$display("RBX = %x", regfile[3]);
-		$display("RCX = %x", regfile[1]);
-		$display("RDX = %0h", regfile[2]);
+            end
+
+            if (idex.ctl_opcode == 1 ) begin
+                // Add instruction 
+                temp = idex.data_regA + idex.data_regB;
+                regfile[idex.ctl_rmByte] = temp;
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
     end
