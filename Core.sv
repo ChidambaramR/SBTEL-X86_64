@@ -105,6 +105,11 @@ module Core (
 
 
         /*
+        * Opcodes for single byte IMUL
+        */
+        opcode_char[247] = "imul    "; opcode_enc[247] = "M  ";
+
+        /*
         * Opcodes for AND
         */
         opcode_char [1] = "add     ";  opcode_enc [1] = "MR ";
@@ -759,6 +764,7 @@ module Core (
                         modRM_byte = decode_bytes[offset*8 +: 1*8];
                         space_buffer[(offset)*8 +: 8] = modRM_byte;
                         offset += 1;
+
                         /*
                          * Check if there is a displacement in the instruction
                          * If mod bit == 0 and RM bit == 5, then 32 bit disp
@@ -803,9 +809,24 @@ module Core (
                     end
 
                     if (opcode_enc_byte == "M  ") begin
-                        // reg bits need to be 2
-                        assert(modRM_byte.reg1 == 2) else $fatal;
-                        reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
+
+                        if (modRM_byte.mod == 3) begin
+                            /*
+                            * Case for IMUL instruction
+                            */
+                            reg_buffer[0:31] = {reg_table_64[rmByte]};  
+                            regByte_contents = regByte;
+                            rmByte_contents = rmByte;
+                            regA_contents = regfile[rmByte];
+                            regB_contents = {64{1'b0}};
+                            imm_contents = {64{1'b0}};
+                        end
+                        else begin
+                            // reg bits need to be 2
+                            assert(modRM_byte.reg1 == 2) else $fatal;
+                            reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
+                        end
+                        
                     end
 
                     else if (opcode_enc_byte == "MR ") begin
@@ -1061,6 +1082,9 @@ module Core (
                 else if(idex.ctl_regByte == 1) begin
                     regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
                 end
+                else if(idex.ctl_regByte == 0) begin
+                    regfile[idex.ctl_rmByte] = idex.data_imm + idex.data_regA;
+                end
             end
 
             if (idex.ctl_opcode == 13) begin
@@ -1078,6 +1102,11 @@ module Core (
                 // Add instruction 
                 temp = idex.data_regA + idex.data_regB;
                 regfile[idex.ctl_rmByte] = temp;
+            end
+
+            if (idex.ctl_opcode == 247 ) begin
+                temp = idex.data_regA * regfile[0]; // One operand is RAX. So using 0
+                regfile[0] = temp;
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
     end
