@@ -44,6 +44,8 @@ module Core (
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
     logic can_execute;
+    logic enable_execute;
+
     initial 
     begin
         
@@ -353,8 +355,6 @@ module Core (
     wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
     wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
     wire can_decode = (fetch_offset - decode_offset >= 7'd15);
-//                if (decode_bytes == 0 && fetch_state == fetch_idle)
-//                  can_decode = 0;
      
     function logic opcode_inside(logic[7:0] value, low, high);
         opcode_inside = (value >= low && value <= high);
@@ -564,6 +564,8 @@ module Core (
     logic[0 : 7] temp_prefix;
     rex rex_prefix;
     mod_rm modRM_byte;
+
+    /* verilator lint_off UNUSED */
     ID_EX idex;
 
     always_comb begin
@@ -591,11 +593,6 @@ module Core (
              */
             temp_prefix = decode_bytes[offset*8 +: 1*8];
             opcode_enc_byte = opcode_enc[temp_prefix];
-
-            if(temp_prefix == 0) begin
-                offset += 10;
-            end
-
             while (opcode_enc_byte == "PRE") begin
                 prefix = temp_prefix;
                 prefix_char = opcode_char[prefix];
@@ -685,7 +682,8 @@ module Core (
                     regA_contents = regfile[opcode - 184];
                     regB_contents = {64{1'b1}};
                     imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
-                    rmByte_contents = opcode - 184;
+                    opcode = opcode - 184;
+                    rmByte_contents = opcode[4:7];
                     regByte_contents = 0;
                 end // End of Opcode for Special MOV block
 
@@ -1052,20 +1050,23 @@ module Core (
             end 
 
             // Print Instruction Encoding for non empty opcode_char[] entries
+            // Also enable execution phase only if decoder can correctly decode the bytes
             if (instr_buffer != empty_str) begin
                 $write("  %0h:    ", prog_addr);
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
+                enable_execute = 1;
+            end
+            else begin
+                enable_execute = 0;
             end
 
             bytes_decoded_this_cycle =+ offset;
-            //can_execute = 1;
             if (decode_bytes == 0 && fetch_state == fetch_idle && can_decode == 0)
                 $finish;
 
         end else begin
             bytes_decoded_this_cycle = 0;
-            //can_execute = 0;
         end
     end
    
@@ -1133,44 +1134,40 @@ module Core (
             decode_buffer <= 0;
         end else begin // !bus.reset
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
-            //if(bytes_decoded_this_cycle != 0) begin
-            //    can_execute <= 1;
-                if(can_decode) begin
-                    idex.pc_contents <= prog_addr;
-                    idex.data_regA <= regA_contents;
-                    idex.data_regB <= regB_contents;
-                    idex.data_disp <= disp_contents;
-                    idex.data_imm <= imm_contents;
-                    idex.ctl_opcode <= opcode_contents;
-                    idex.ctl_rmByte <= rmByte_contents;
-                    idex.ctl_regByte <= regByte_contents;
-                    can_execute <= 1;
-                end
-                else
-                    can_execute <= 0;
-                    
-            //end
-            //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
+
+            can_execute <= 0;
+            if (can_decode) begin
+                idex.pc_contents <= prog_addr;
+                idex.data_regA <= regA_contents;
+                idex.data_regB <= regB_contents;
+                idex.data_disp <= disp_contents;
+                idex.data_imm <= imm_contents;
+                idex.ctl_opcode <= opcode_contents;
+                idex.ctl_rmByte <= rmByte_contents;
+                idex.ctl_regByte <= regByte_contents;
+
+                if (enable_execute) can_execute <= 1;
+            end
         end
     end
 
-	// cse502 : Use the following as a guide to print the Register File contents.
-	final begin
-		$display("RAX = %x", regfile[0]);
-		$display("RBX = %x", regfile[3]);
-		$display("RCX = %x", regfile[1]);
-		$display("RDX = %0h", regfile[2]);
-		$display("RSI = %0h", regfile[6]);
-		$display("RDI = %0h", regfile[7]);
-		$display("RBP = %0h", regfile[5]);
-		$display("RSP = %0h", regfile[4]);
-		$display("R8 = %0h", regfile[8]);
-		$display("R9 = %0h", regfile[9]);
-		$display("R10 = %0h", regfile[10]);
-		$display("R11 = %0h", regfile[11]);
-		$display("R12 = %0h", regfile[12]);
-		$display("R13 = %0h", regfile[13]);
-		$display("R14 = %0h", regfile[14]);
-		$display("R15 = %0h", regfile[15]);
-	end
+    // cse502 : Use the following as a guide to print the Register File contents.
+    final begin
+            $display("RAX = %x", regfile[0]);
+            $display("RBX = %x", regfile[3]);
+            $display("RCX = %x", regfile[1]);
+            $display("RDX = %0h", regfile[2]);
+            $display("RSI = %0h", regfile[6]);
+            $display("RDI = %0h", regfile[7]);
+            $display("RBP = %0h", regfile[5]);
+            $display("RSP = %0h", regfile[4]);
+            $display("R8 = %0h", regfile[8]);
+            $display("R9 = %0h", regfile[9]);
+            $display("R10 = %0h", regfile[10]);
+            $display("R11 = %0h", regfile[11]);
+            $display("R12 = %0h", regfile[12]);
+            $display("R13 = %0h", regfile[13]);
+            $display("R14 = %0h", regfile[14]);
+            $display("R15 = %0h", regfile[15]);
+    end
 endmodule
