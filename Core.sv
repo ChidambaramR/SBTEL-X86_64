@@ -105,20 +105,20 @@ module Core (
 
 
         /*
-        * Opcodes for single byte IMUL
-        */
-        opcode_char[247] = "imul    "; opcode_enc[247] = "M  ";
+         * Opcodes for single byte IMUL
+         */
+        opcode_char[247] = "imul    "; opcode_enc[247] = "M  "; // F7
 
         /*
-        * Opcodes for AND
-        */
-        opcode_char [1] = "add     ";  opcode_enc [1] = "MR ";
+         * Opcodes for AND
+         */
+        opcode_char  [1] = "add     "; opcode_enc  [1] = "MR ";
 
         /*
         * Opcodes for OR
         */
         opcode_char [13] = "or      "; opcode_enc [13] = "I  ";
-        opcode_char [9] = "or      ";  opcode_enc [9] = "MR ";
+        opcode_char  [9] = "or      "; opcode_enc  [9] = "MR ";
         /*
          * Opcodes for XOR
          */
@@ -528,6 +528,12 @@ module Core (
     logic[0 : 63] imm_contents;
     logic[0 : 7] opcode_contents;
 
+    logic[0 : 127] data_regAA;
+    logic[0 : 127] data_regBB;
+
+    logic[0 : 8*8-1]  temp8;
+    logic[0 : 16*8-1] temp16;
+
     logic[0 : 4-1] regByte_contents; // 4 bit Register A INDEX for the ALU
     logic[0 : 4-1] rmByte_contents; // 4 bit Register B INDEX for the ALU
 
@@ -812,8 +818,8 @@ module Core (
 
                         if (modRM_byte.mod == 3) begin
                             /*
-                            * Case for IMUL instruction
-                            */
+                             * Case for IMUL instruction
+                             */
                             reg_buffer[0:31] = {reg_table_64[rmByte]};  
                             regByte_contents = regByte;
                             rmByte_contents = rmByte;
@@ -1063,15 +1069,14 @@ module Core (
         end
     end
    
-    logic [0:63] temp;
     always_comb begin
         if (can_execute) begin : execute_block
             if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191))          //   Mov Imm 
                 regfile[idex.ctl_rmByte] = idex.data_imm;
 
             if(idex.ctl_opcode == 137) begin // Move reg to reg
-                temp = regfile[idex.ctl_regByte];
-                regfile[idex.ctl_rmByte] = temp;
+                temp8 = regfile[idex.ctl_regByte];
+                regfile[idex.ctl_rmByte] = temp8;
             end
 
             if(opcode_group[idex.ctl_opcode] != 0) begin
@@ -1094,19 +1099,29 @@ module Core (
 
             if (idex.ctl_opcode == 9 ) begin
                 // OR instruction with reg operands 
-                temp = idex.data_regA | idex.data_regB;
-                regfile[idex.ctl_rmByte] = temp;
+                temp8 = idex.data_regA | idex.data_regB;
+                regfile[idex.ctl_rmByte] = temp8;
             end
 
             if (idex.ctl_opcode == 1 ) begin
                 // Add instruction 
-                temp = idex.data_regA + idex.data_regB;
-                regfile[idex.ctl_rmByte] = temp;
+                temp8 = idex.data_regA + idex.data_regB;
+                regfile[idex.ctl_rmByte] = temp8;
             end
 
             if (idex.ctl_opcode == 247 ) begin
-                temp = idex.data_regA * regfile[0]; // One operand is RAX. So using 0
-                regfile[0] = temp;
+                // IMUL instruction "RDX:RAX = RAX * REG64"
+
+                // Sign extend 64 bit register values to 128 bit
+                data_regAA = {{64{regfile[0][0]}}, regfile[0]}; 
+                data_regBB = {{64{idex.data_regA[0]}}, idex.data_regA};
+
+                // 128 bit multiplication
+                temp16 = data_regAA * data_regBB;
+
+                // Store result into RDX:RAX
+                regfile[0] = temp16[64:127];
+                regfile[2] = temp16[0:63];
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
     end
