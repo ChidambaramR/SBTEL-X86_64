@@ -1153,21 +1153,21 @@ module Core (
 
     // cse502 : Use the following as a guide to print the Register File contents.
     final begin
-            $display("RAX = %x", regfile[0]);
-            $display("RBX = %x", regfile[3]);
-            $display("RCX = %x", regfile[1]);
-            $display("RDX = %0h", regfile[2]);
-            $display("RSI = %0h", regfile[6]);
-            $display("RDI = %0h", regfile[7]);
-            $display("RBP = %0h", regfile[5]);
-            $display("RSP = %0h", regfile[4]);
-            $display("R8 = %0h", regfile[8]);
-            $display("R9 = %0h", regfile[9]);
-            $display("R10 = %0h", regfile[10]);
-            $display("R11 = %0h", regfile[11]);
-            $display("R12 = %0h", regfile[12]);
-            $display("R13 = %0h", regfile[13]);
-            $display("R14 = %0h", regfile[14]);
-            $display("R15 = %0h", regfile[15]);
+            $display("RAX = 0x%0h", regfile[0]);
+            $display("RBX = 0x%0h", regfile[3]);
+            $display("RCX = 0x%0h", regfile[1]);
+            $display("RDX = 0x%0h", regfile[2]);
+            $display("RSI = 0x%0h", regfile[6]);
+            $display("RDI = 0x%0h", regfile[7]);
+            $display("RBP = 0x%0h", regfile[5]);
+            $display("RSP = 0x%0h", regfile[4]);
+            $display("R8 =  0x%0h", regfile[8]);
+            $display("R9 =  0x%0h", regfile[9]);
+            $display("R10 = 0x%0h", regfile[10]);
+            $display("R11 = 0x%0h", regfile[11]);
+            $display("R12 = 0x%0h", regfile[12]);
+            $display("R13 = 0x%0h", regfile[13]);
+            $display("R14 = 0x%0h", regfile[14]);
+            $display("R15 = 0x%0h", regfile[15]);
     end
 endmodule
