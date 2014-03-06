@@ -280,23 +280,22 @@ module Core (
     end 
    
     function void disp_reg_file();
-		$display("RAX = %x", regfile[0]);
-		$display("RBX = %x", regfile[3]);
-		$display("RCX = %x", regfile[1]);
-		$display("RDX = %0h", regfile[2]);
-		$display("RSI = %0h", regfile[6]);
-		$display("RDI = %0h", regfile[7]);
-		$display("RBP = %0h", regfile[5]);
-		$display("RSP = %0h", regfile[4]);
-		$display("R8 = %0h", regfile[8]);
-		$display("R9 = %0h", regfile[9]);
-		$display("R10 = %0h", regfile[10]);
-		$display("R11 = %0h", regfile[11]);
-		$display("R12 = %0h", regfile[12]);
-		$display("R13 = %0h", regfile[13]);
-		$display("R14 = %0h", regfile[14]);
-		$display("R15 = %0h", regfile[15]);
-    
+        $display("RAX = %x", regfile[0]);
+        $display("RBX = %x", regfile[3]);
+        $display("RCX = %x", regfile[1]);
+        $display("RDX = %0h", regfile[2]);
+        $display("RSI = %0h", regfile[6]);
+        $display("RDI = %0h", regfile[7]);
+        $display("RBP = %0h", regfile[5]);
+        $display("RSP = %0h", regfile[4]);
+        $display("R8 = %0h", regfile[8]);
+        $display("R9 = %0h", regfile[9]);
+        $display("R10 = %0h", regfile[10]);
+        $display("R11 = %0h", regfile[11]);
+        $display("R12 = %0h", regfile[12]);
+        $display("R13 = %0h", regfile[13]);
+        $display("R14 = %0h", regfile[14]);
+        $display("R15 = %0h", regfile[15]);
     endfunction 
 
     function logic mtrr_is_mmio(logic[63:0] physaddr);
@@ -1062,7 +1061,9 @@ module Core (
             end
 
             bytes_decoded_this_cycle =+ offset;
-            if (decode_bytes == 0 && fetch_state == fetch_idle && can_decode == 0)
+
+            // Note: Currently we finish on retq instruction. Later we might want to change below condition.
+            if (instr_buffer == "retq    ")
                 $finish;
 
         end else begin
