@@ -9,6 +9,7 @@ module Core (
     logic[5:0] fetch_skip;
     logic[6:0] fetch_offset, decode_offset;
     logic[0:63] regfile[0:16-1];
+    
 
     /*
      * This is the REX prefix
@@ -34,6 +35,7 @@ module Core (
     logic [0:8] i = 0;
     logic [0:3] j = 0;
     logic [0:63] prog_addr;
+    logic [0:63] prog_addr_exmem;
     logic [0:63] temp_crr;
 
     // 2D Array
@@ -43,8 +45,11 @@ module Core (
     logic [0:15*8-1] space_buffer;
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
+
     logic can_execute;
+    logic can_writeback;
     logic enable_execute;
+    logic enable_writeback;
 
     initial 
     begin
@@ -59,6 +64,7 @@ module Core (
         for (j = 0; j <= 14; j++) begin
             regfile[j] = {64{1'b0}};
         end
+
         /*
          * Following values are converted into decimal from hex.
          * For example, 0x89 is the hex opcode. This is 137 in decimal
@@ -326,14 +332,40 @@ module Core (
         end else begin // !bus.reset
     
             bus.reqcyc <= send_fetch_req;
+            /*
+            * REQCYC
+            * If reqcyc is up, then we are sending a request to the memory.
+              Immediately after sending the request, we will be getting back an 
+              ACK from the bus. Once we get back an ACK, we know our request 
+              has been acknowledged and we have to start waiting for the resposne. 
+            */
+
+            /*
+            * SEND_FETCH_REQ
+            * Whenever we get an ACK, the send_fetch_req goes down.
+            */
+
+            /*
+            * FETCH_RIP & ~63
+            * Dont understand.
+            * This and logic is to fetch not more than 64 bytes. If the entry is 8000E0, then
+            * result of the and is 8000C0. That means we have to fetch from 800000 to 8000C0.
+            * how is this 64 bytes?
+            */
             bus.req <= fetch_rip & ~63;
             bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
     
             if (bus.respcyc) begin
+                /*
+                * It takes around 48 micro seconds for a response to come back.
+                */
                 assert(!send_fetch_req) else $fatal;
                 fetch_state <= fetch_active;
                 fetch_rip <= fetch_rip + 8;
                 if (fetch_skip > 0) begin
+                    /*
+                    * Fetch skip is up only when there is a response for the first time. 
+                    */
                     fetch_skip <= fetch_skip - 8;
                 end else begin
                     decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
@@ -343,7 +375,15 @@ module Core (
                 if (fetch_state == fetch_active) begin
                     fetch_state <= fetch_idle;
                 end else if (bus.reqack) begin
+                    /*
+                    * We got an ACK from the bus. So we have to wait.
+                    */
                     assert(fetch_state == fetch_idle) else $fatal;
+                    /*
+                    * At the point when we got an ACK, the fetch state should have been idle. If the
+                      fetch state was not idle, we would not have sent a request at all. So we are making
+                      the sanity check. 
+                    */
                     fetch_state <= fetch_waiting;
                 end
             end
@@ -508,19 +548,60 @@ module Core (
                    Opcode value (1 byte)
     */
     
+    // Refer to slide 11 of 43 in CSE502-L4-Pipilining.pdf
     typedef struct packed {
+        // PC + 1
         logic [0:63] pc_contents;
+        // REGA Contents
         logic [0:63] data_regA;
+        // REGB Contents
         logic [0:63] data_regB;
+        // Control signals
         logic [0:63] data_disp;
         logic [0:63] data_imm;
         logic [0:7]  ctl_opcode;
         logic [0:3]  ctl_regByte;
         logic [0:3]  ctl_rmByte;
     } ID_EX;
-    
+
+    // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+    typedef struct packed {
+        // PC + 1
+        logic [0:63] pc_contents;
+        // ALU Result
+        logic [0:63] alu_result;
+        // REGB Contents
+        logic [0:63] data_regB;
+        // Control signals
+        logic [0:63] data_disp;
+        logic [0:63] data_imm;
+        logic [0:7]  ctl_opcode;
+        logic [0:3]  ctl_regByte;
+        logic [0:3]  ctl_rmByte;
+    } EX_MEM;
+
+    /*
+    * Refer to wiki page of RFLAGS for the bit pattern
+    */ 
+    typedef struct packed {
+        logic [12:63] unused;
+        logic of; // Overflow flag
+        logic df; // Direction flag
+        logic If; // Interrupt flag. Not the capital case for I
+        logic tf; // trap flag
+        logic sf; // sign flag
+        logic zf; // zero flag
+        logic res_3; // reserved bit. Should be set to 0
+        logic af; // adjust flag
+        logic res_2; // reserved bit. should be set to 0
+        logic pf; // Parity flag
+        logic res_1; // reserved bit. should be set to 1
+        logic cf; // Carry flag
+    } flags_reg;
+  
 
 //    logic[0 : (8*8)+(8*8)+(8*8)+(8*8)+(8*8)+(8-1)] IDEX; // PIPELINE REGISTER
+    // Temporary values which will be stored in the IDEX pipeline register
     logic[0 : 63] regA_contents;
     logic[0 : 63] regB_contents;
     logic[0 : 63] disp_contents;
@@ -530,11 +611,22 @@ module Core (
     logic[0 : 127] data_regAA;
     logic[0 : 127] data_regBB;
 
-    logic[0 : 8*8-1]  temp8;
     logic[0 : 16*8-1] temp16;
 
     logic[0 : 4-1] regByte_contents; // 4 bit Register A INDEX for the ALU
     logic[0 : 4-1] rmByte_contents; // 4 bit Register B INDEX for the ALU
+
+    logic[0 : 64] ext_addReg;
+
+
+    // Temporary values to be given to the EXMEM pipeline register
+    logic[0 : 63] alu_result_exmem;
+    logic[0 : 63] regB_contents_exmem;
+    logic[0 : 4-1] regByte_contents_exmem;
+    logic[0 : 4-1] rmByte_contents_exmem;
+
+
+
 
     /*
     All deifinitions (state elements) for DECODER goes here
@@ -550,6 +642,8 @@ module Core (
     logic[0 : 4*8-1] high_byte;
     logic[0 : 4*8-1] low_byte;
     logic rip_flag;
+
+
     /*
      * Signed immediate and displacement variable declaration. try to re-use these variables
      */
@@ -566,6 +660,8 @@ module Core (
 
     /* verilator lint_off UNUSED */
     ID_EX idex;
+    EX_MEM exmem;
+    flags_reg rflags;
 
     always_comb begin
         if (can_decode) begin : decode_block
@@ -1067,48 +1163,69 @@ module Core (
                 $finish;
 
         end else begin
+            enable_execute = 0;
             bytes_decoded_this_cycle = 0;
         end
-    end
-   
+      end
+  
+    /*
+    * This is the ALU block. Any comments about ALU add here.
+    * Info about RFLAGS for each instruction
+    * ADD:
+    *     It sets the OF and the CF flags to indiciate a carry(overflow) in the signed or unsigned result. 
+          The SF indicates the sign of the signed result
+    */
     always_comb begin
         if (can_execute) begin : execute_block
-            if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191))          //   Mov Imm 
-                regfile[idex.ctl_rmByte] = idex.data_imm;
+            if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191)) begin         //   Mov Imm 
+                //regfile[idex.ctl_rmByte] = idex.data_imm;
+                alu_result_exmem = idex.data_imm;
+                rmByte_contents_exmem = idex.ctl_rmByte;
+            end
 
             if(idex.ctl_opcode == 137) begin // Move reg to reg
-                temp8 = regfile[idex.ctl_regByte];
-                regfile[idex.ctl_rmByte] = temp8;
+                rmByte_contents_exmem = idex.ctl_rmByte;
+                alu_result_exmem = regfile[idex.ctl_regByte];
             end
 
             if(opcode_group[idex.ctl_opcode] != 0) begin
                 if(idex.ctl_regByte == 4) begin
                     //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
-                    regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
+                    //regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
+                    rmByte_contents_exmem = idex.ctl_rmByte;
+                    alu_result_exmem = idex.data_imm & idex.data_regA;
                 end
                 else if(idex.ctl_regByte == 1) begin
-                    regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
+                    //regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
+                    rmByte_contents_exmem = idex.ctl_rmByte;
+                    alu_result_exmem = idex.data_imm | idex.data_regA;
                 end
                 else if(idex.ctl_regByte == 0) begin
-                    regfile[idex.ctl_rmByte] = idex.data_imm + idex.data_regA;
+                    ext_addReg = {65{1'b0}};
+                    ext_addReg = idex.data_imm + idex.data_regA;
+                    rmByte_contents_exmem = idex.ctl_rmByte;
+                    alu_result_exmem = ext_addReg[0:63];
+                    rflags.cf = ext_addReg[64];
                 end
             end
 
             if (idex.ctl_opcode == 13) begin
                 // OR instruction with immediate operands
-                regfile[0] = idex.data_imm | idex.data_regA;
+                //regfile[0] = idex.data_imm | idex.data_regA;
+                alu_result_exmem = idex.data_imm | idex.data_regA;
+                rmByte_contents_exmem = 0;
             end
 
             if (idex.ctl_opcode == 9 ) begin
                 // OR instruction with reg operands 
-                temp8 = idex.data_regA | idex.data_regB;
-                regfile[idex.ctl_rmByte] = temp8;
+                alu_result_exmem = idex.data_regA | idex.data_regB;
+                rmByte_contents_exmem = idex.ctl_rmByte;
             end
 
             if (idex.ctl_opcode == 1 ) begin
                 // Add instruction 
-                temp8 = idex.data_regA + idex.data_regB;
-                regfile[idex.ctl_rmByte] = temp8;
+                alu_result_exmem = idex.data_regA + idex.data_regB;;
+                rmByte_contents_exmem = idex.ctl_rmByte;
             end
 
             if (idex.ctl_opcode == 247 ) begin
@@ -1122,11 +1239,23 @@ module Core (
                 temp16 = data_regAA * data_regBB;
 
                 // Store result into RDX:RAX
-                regfile[0] = temp16[64:127];
-                regfile[2] = temp16[0:63];
+                //regfile[0] = temp16[64:127];
+                //regfile[2] = temp16[0:63];
+                alu_result_exmem = temp16[0:63];
+                rmByte_contents_exmem = 0;
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
+            prog_addr_exmem = idex.pc_contents;
+            enable_writeback = 1;
+        end
     end
+
+
+    always_comb begin
+        if (can_writeback) begin
+            regfile[exmem.ctl_rmByte] = exmem.alu_result;
+        end
+
     end
 
     always @ (posedge bus.clk) begin
@@ -1146,9 +1275,23 @@ module Core (
                 idex.ctl_opcode <= opcode_contents;
                 idex.ctl_rmByte <= rmByte_contents;
                 idex.ctl_regByte <= regByte_contents;
-
-                if (enable_execute) can_execute <= 1;
             end
+
+            if (enable_execute) begin
+                can_execute <= 1;
+                if(enable_writeback) begin
+                    exmem.pc_contents <= prog_addr_exmem;
+                    exmem.alu_result <= alu_result_exmem;
+                    exmem.data_regB <= regB_contents_exmem;
+                    exmem.ctl_rmByte <= rmByte_contents_exmem;
+                    exmem.ctl_regByte <= regByte_contents_exmem;
+                end
+            end
+  
+            if(can_execute)
+                can_writeback <= 1;
+            else
+                can_writeback <= 0;  
         end
     end
 
