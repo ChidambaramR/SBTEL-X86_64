@@ -9,6 +9,7 @@ module Core (
     logic[5:0] fetch_skip;
     logic[6:0] fetch_offset, decode_offset;
     logic[0:63] regfile[0:16-1];
+    logic score_board[0:16-1];
     
 
     /*
@@ -50,6 +51,7 @@ module Core (
     logic can_writeback;
     logic enable_execute;
     logic enable_writeback;
+    logic[0:1] dependency;
 
     initial 
     begin
@@ -64,6 +66,10 @@ module Core (
         for (j = 0; j <= 14; j++) begin
             regfile[j] = {64{1'b0}};
         end
+
+        /*for (j = 0; j <= 14; j++) begin
+            score_board[j] = 0;
+        end*/
 
         /*
          * Following values are converted into decimal from hex.
@@ -534,6 +540,16 @@ module Core (
         end
     endfunction
 
+    function logic check_dep();
+        logic depp = 0;
+        logic[0 : 3] ii = 0;
+        for(ii = 0; ii < 14; ii++) begin
+            if(score_board[ii] == 1)
+                depp = 1;
+        end
+        check_dep = depp;
+    endfunction
+
 
     /*
     All definitions (state elements) for ALU goes here
@@ -724,13 +740,22 @@ module Core (
                     space_buffer[(offset)*8 +: 4*8] = imm_byte;
                     offset += 4; // Assuming immediate values as 4. Correct?
                     reg_buffer[0:135] = {{"$0x"}, {byte4_to_str(byte_swap(imm_byte))}, {", "}, {reg_table_64[0]}};
-                  
-                    imm_contents = {{32{1'b0}}, {imm_byte}};
-                    imm_contents = {{byte_swap(imm_contents[0:31])}, {byte_swap(imm_contents[32:63])}};
-                    regB_contents = {64{1'b0}};
-                    regA_contents = regfile[0]; // Statically assigning 0 because it is RAX for opcode 13
-                    rmByte_contents = 0;
-                    regByte_contents = 0; //{4{1'b0}};
+                 
+                    if(score_board[0] == 0) begin
+                        /*
+                        * If register is available (i.e score board val is 0)
+                        */
+                        imm_contents = {{32{1'b0}}, {imm_byte}};
+                        imm_contents = {{byte_swap(imm_contents[0:31])}, {byte_swap(imm_contents[32:63])}};
+                        regB_contents = {64{1'b0}};
+                        regA_contents = regfile[0]; // Statically assigning 0 because it is RAX for opcode 13
+                        rmByte_contents = 0;
+                        regByte_contents = 0; //{4{1'b0}};
+                        dependency = 1;
+                    end
+                    else
+                        offset = 0;
+
                 end
                 if (opcode == 108) begin
                     /* INSB instruction */
@@ -754,8 +779,17 @@ module Core (
 
                     opcode = opcode - 80;
                     reg_buffer[0:31] = reg_table_64[opcode];
-                    regA_contents = regfile[opcode[0:3]]; // Get the 8 byte register content and store in temp register
-                    regB_contents = {{64{1'b1}}};
+
+                    if(score_board[opcode[0:3]] == 0) begin
+                        // Checking for availability of registers
+                        regA_contents = regfile[opcode[0:3]]; // Get the 8 byte register content and store in temp register
+                        regB_contents = {{64{1'b1}}};
+                        dependency = 1;
+                    end
+                    else begin
+                        offset = 0;
+                        enable_execute = 0;
+                    end
 
                 end // End of Opcode for Special PUSH/POP block
 
@@ -773,13 +807,22 @@ module Core (
 
                     reg_buffer[0:199] = {{"$0x"}, {byte8_to_str({byte_swap(low_byte), byte_swap(high_byte)})},
                                   {", "}, {reg_table_64[opcode - 184]} };
-                    instr_buffer = opcode_char[opcode]; 
-                    regA_contents = regfile[opcode - 184];
-                    regB_contents = {64{1'b1}};
-                    imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
-                    opcode = opcode - 184;
-                    rmByte_contents = opcode[4:7];
-                    regByte_contents = 0;
+                    instr_buffer = opcode_char[opcode];
+
+                    if(score_board[opcode - 184] == 0) begin
+                        regA_contents = regfile[opcode - 184];
+                        regB_contents = {64{1'b1}};
+                        imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
+                        opcode = opcode - 184;
+                        rmByte_contents = opcode[4:7];
+                        regByte_contents = 0;
+                        dependency = 1;
+                    end
+                    else begin
+                        enable_execute = 0;
+                        offset = 0;
+                    end
+
                 end // End of Opcode for Special MOV block
 
                 else if ((opcode == 193) || (opcode == 209) || (opcode == 211)) begin //Begin of SHIFT Instructions
@@ -913,12 +956,19 @@ module Core (
                             /*
                              * Case for IMUL instruction
                              */
-                            reg_buffer[0:31] = {reg_table_64[rmByte]};  
-                            regByte_contents = regByte;
-                            rmByte_contents = rmByte;
-                            regA_contents = regfile[rmByte];
-                            regB_contents = {64{1'b0}};
-                            imm_contents = {64{1'b0}};
+                            reg_buffer[0:31] = {reg_table_64[rmByte]};
+                            if(score_board[rmByte] == 0) begin
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                regA_contents = regfile[rmByte];
+                                regB_contents = {64{1'b0}};
+                                imm_contents = {64{1'b0}};
+                                dependency = 1;
+                            end
+                            else begin
+                                offset = 0;
+                                enable_execute = 0;
+                            end
                         end
                         else begin
                             // reg bits need to be 2
@@ -937,11 +987,19 @@ module Core (
                              * There is no displacement and no index registers
                              */
                             reg_buffer[0:79] = {{reg_table_64[regByte]}, {", "}, {reg_table_64[rmByte]}};
-                            regByte_contents = regByte;
-                            rmByte_contents = rmByte;
-                            regA_contents = regfile[regByte];
-                            regB_contents = regfile[rmByte];
-                            imm_contents = {64{1'b0}};
+                            if((score_board[regByte] == 0) && (score_board[rmByte] == 0)) begin
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                regA_contents = regfile[regByte];
+                                regB_contents = regfile[rmByte];
+                                imm_contents = {64{1'b0}};
+                                dependency = 2;
+                            end
+                            else begin
+                                offset = 0;
+                                enable_execute = 0;
+                            end
+
                         end
                         else if (disp_byte != 0) begin
                             /*
@@ -998,11 +1056,18 @@ module Core (
                              * There is no displacement and index register
                              */
                             reg_buffer[0:79] = {{reg_table_64[rmByte]}, {", "}, {reg_table_64[regByte]}};
-                            regByte_contents = regByte;
-                            rmByte_contents = rmByte;
-                            regA_contents = regfile[regByte];
-                            regB_contents = regfile[rmByte];
-                            imm_contents = {64{1'b0}};
+                            if((score_board[regByte] == 0) && (score_board[rmByte] == 0)) begin
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                regA_contents = regfile[regByte];
+                                regB_contents = regfile[rmByte];
+                                imm_contents = {64{1'b0}};
+                            end
+                            else begin
+                                offset = 0;
+                                enable_execute = 0;
+                            end
+
                         end
                         else if (disp_byte != 0) begin
                             /*
@@ -1275,6 +1340,18 @@ module Core (
                 idex.ctl_opcode <= opcode_contents;
                 idex.ctl_rmByte <= rmByte_contents;
                 idex.ctl_regByte <= regByte_contents;
+
+                // Decoder is detecting a dependency
+                if(dependency == 1) begin
+                    //while(1);
+                    $write("BOOM BOOM. Ins = %s",opcode_char[opcode_contents]);
+                    score_board[rmByte_contents] <= 1;
+                end
+                else if(dependency == 2) begin
+                    $write("BOOM BOOM\n");
+                    score_board[rmByte_contents] <= 1;
+                    score_board[regByte_contents] <= 1;
+                end
             end
 
             if (enable_execute) begin
@@ -1285,11 +1362,13 @@ module Core (
                     exmem.data_regB <= regB_contents_exmem;
                     exmem.ctl_rmByte <= rmByte_contents_exmem;
                     exmem.ctl_regByte <= regByte_contents_exmem;
+                    score_board[rmByte_contents_exmem] <= 0;
                 end
             end
   
             if(can_execute)
-                can_writeback <= 1;
+                if(enable_writeback)
+                    can_writeback <= 1;
             else
                 can_writeback <= 0;  
         end
