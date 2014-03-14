@@ -37,6 +37,7 @@ module Core (
     logic [0:3] j = 0;
     logic [0:63] prog_addr;
     logic [0:63] prog_addr_exmem;
+    logic [0:1]  dep_exmem;
     logic [0:63] temp_crr;
 
     // 2D Array
@@ -578,6 +579,7 @@ module Core (
         logic [0:7]  ctl_opcode;
         logic [0:3]  ctl_regByte;
         logic [0:3]  ctl_rmByte;
+        logic [0:1]  ctl_dep;
     } ID_EX;
 
     // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -1134,10 +1136,17 @@ module Core (
                         
                         imm_contents = {{32{1'b0}}, {imm_byte}};
                         imm_contents = {{byte_swap(imm_contents[0:31])}, {byte_swap(imm_contents[32:63])}};
-                        regB_contents = {64{1'b0}};
-                        regA_contents = regfile[rmByte];
-                        rmByte_contents = rmByte;
-                        regByte_contents = regByte; //{4{1'b0}};
+                        if(score_board[rmByte] == 0) begin
+                            regB_contents = {64{1'b0}};
+                            regA_contents = regfile[rmByte];
+                            rmByte_contents = rmByte;
+                            regByte_contents = regByte; //{4{1'b0}};
+                            dependency = 1;
+                        end
+                        else begin
+                            offset = 0;
+                            enable_execute = 0;
+                        end
 
                         /*
                         Dont know why I wrote this code. Keep it. Do not delete
@@ -1172,10 +1181,17 @@ module Core (
                         imm_contents = signed_imm_byte;
                         regB_contents = {64{1'b0}};
                         reg_buffer[0:199] = {{"$0x"}, {byte8_to_str(signed_imm_byte)}, {", "}, {reg_table_64[rmByte]}};
-                        regB_contents = {64{1'b0}};
-                        regA_contents = regfile[rmByte];
-                        rmByte_contents = rmByte;
-                        regByte_contents = regByte;
+                        if(score_board[rmByte] == 0) begin
+                            regB_contents = {64{1'b0}};
+                            regA_contents = regfile[rmByte];
+                            rmByte_contents = rmByte;
+                            regByte_contents = regByte;
+                            dependency = 1;
+                        end
+                        else begin
+                            offset = 0;
+                            enable_execute = 0;
+                        end
                     
                     end
 
@@ -1242,6 +1258,8 @@ module Core (
     */
     always_comb begin
         if (can_execute) begin : execute_block
+
+            dep_exmem = idex.ctl_dep;
             if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191)) begin         //   Mov Imm 
                 //regfile[idex.ctl_rmByte] = idex.data_imm;
                 alu_result_exmem = idex.data_imm;
@@ -1313,6 +1331,8 @@ module Core (
             prog_addr_exmem = idex.pc_contents;
             enable_writeback = 1;
         end
+        else
+            enable_writeback = 0;
     end
 
 
@@ -1332,6 +1352,24 @@ module Core (
 
             can_execute <= 0;
             if (can_decode) begin
+
+                // Decoder is detecting a dependency
+                if(dependency == 1) begin
+                    //while(1);
+                    //$write("BOOM BOOM. Ins = %s",opcode_char[opcode_contents]);
+                    score_board[rmByte_contents] <= 1;
+                end
+                else if(dependency == 2) begin
+                    //$write("BOOM BOOM\n");
+                    score_board[rmByte_contents] <= 1;
+                    score_board[regByte_contents] <= 1;
+                end
+            end
+
+            if (enable_execute) begin
+                /*
+                * Giving to the pipeline register of ALU
+                */
                 idex.pc_contents <= prog_addr;
                 idex.data_regA <= regA_contents;
                 idex.data_regB <= regB_contents;
@@ -1340,37 +1378,26 @@ module Core (
                 idex.ctl_opcode <= opcode_contents;
                 idex.ctl_rmByte <= rmByte_contents;
                 idex.ctl_regByte <= regByte_contents;
-
-                // Decoder is detecting a dependency
-                if(dependency == 1) begin
-                    //while(1);
-                    $write("BOOM BOOM. Ins = %s",opcode_char[opcode_contents]);
-                    score_board[rmByte_contents] <= 1;
-                end
-                else if(dependency == 2) begin
-                    $write("BOOM BOOM\n");
-                    score_board[rmByte_contents] <= 1;
-                    score_board[regByte_contents] <= 1;
-                end
-            end
-
-            if (enable_execute) begin
+                idex.ctl_dep <= dependency;
                 can_execute <= 1;
-                if(enable_writeback) begin
-                    exmem.pc_contents <= prog_addr_exmem;
-                    exmem.alu_result <= alu_result_exmem;
-                    exmem.data_regB <= regB_contents_exmem;
-                    exmem.ctl_rmByte <= rmByte_contents_exmem;
-                    exmem.ctl_regByte <= regByte_contents_exmem;
-                    score_board[rmByte_contents_exmem] <= 0;
-                end
             end
-  
-            if(can_execute)
-                if(enable_writeback)
-                    can_writeback <= 1;
-            else
-                can_writeback <= 0;  
+
+            can_writeback <= 0;
+            if(enable_writeback) begin
+                /*
+                * Giving to the write back stage of the processor
+                */
+                exmem.pc_contents <= prog_addr_exmem;
+                exmem.alu_result <= alu_result_exmem;
+                exmem.data_regB <= regB_contents_exmem;
+                exmem.ctl_rmByte <= rmByte_contents_exmem;
+                exmem.ctl_regByte <= regByte_contents_exmem;
+                score_board[rmByte_contents_exmem] <= 0;
+                if(dep_exmem == 2)
+                    score_board[regByte_contents_exmem] <= 0;
+                can_writeback <= 1;
+            end
+
         end
     end
 
