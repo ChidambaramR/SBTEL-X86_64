@@ -64,7 +64,7 @@ module Core (
             opcode_group[i] = 0;
         end
 
-        for (j = 0; j <= 14; j++) begin
+        for (j = 0; j <= 15; j++) begin
             regfile[j] = {64{1'b0}};
         end
 
@@ -682,6 +682,9 @@ module Core (
     flags_reg rflags;
 
     always_comb begin
+            if(can_writeback == 1)
+                can_decode = 0;
+
         if (can_decode) begin : decode_block
             // Variables which are to be reset for each new decoding
             offset = 0;
@@ -755,8 +758,11 @@ module Core (
                         regByte_contents = 0; //{4{1'b0}};
                         dependency = 1;
                     end
-                    else
+                    else begin
                         offset = 0;
+                        can_decode = 0;
+                        enable_execute = 0;
+                    end
 
                 end
                 if (opcode == 108) begin
@@ -790,6 +796,7 @@ module Core (
                     end
                     else begin
                         offset = 0;
+                        can_decode = 0;
                         enable_execute = 0;
                     end
 
@@ -817,10 +824,13 @@ module Core (
                         imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
                         opcode = opcode - 184;
                         rmByte_contents = opcode[4:7];
+                        //$write("opcode = %s rm %0h",reg_table_64[rmByte_contents], rmByte_contents);
                         regByte_contents = 0;
                         dependency = 1;
                     end
                     else begin
+                        $write("scre board occupied");
+                        can_decode = 0;
                         enable_execute = 0;
                         offset = 0;
                     end
@@ -969,6 +979,7 @@ module Core (
                             end
                             else begin
                                 offset = 0;
+                                can_decode = 0;
                                 enable_execute = 0;
                             end
                         end
@@ -995,10 +1006,12 @@ module Core (
                                 regA_contents = regfile[regByte];
                                 regB_contents = regfile[rmByte];
                                 imm_contents = {64{1'b0}};
+                                $write("regByte = %0h rmByte = %0h",regByte_contents, rmByte_contents);
                                 dependency = 2;
                             end
                             else begin
                                 offset = 0;
+                                can_decode = 0;
                                 enable_execute = 0;
                             end
 
@@ -1145,6 +1158,7 @@ module Core (
                         end
                         else begin
                             offset = 0;
+                            can_decode = 0;
                             enable_execute = 0;
                         end
 
@@ -1190,6 +1204,7 @@ module Core (
                         end
                         else begin
                             offset = 0;
+                            can_decode = 0;
                             enable_execute = 0;
                         end
                     
@@ -1227,7 +1242,7 @@ module Core (
 
             // Print Instruction Encoding for non empty opcode_char[] entries
             // Also enable execution phase only if decoder can correctly decode the bytes
-            if (instr_buffer != empty_str) begin
+            if ((instr_buffer != empty_str) && can_decode) begin
                 $write("  %0h:    ", prog_addr);
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
@@ -1260,58 +1275,59 @@ module Core (
         if (can_execute) begin : execute_block
 
             dep_exmem = idex.ctl_dep;
+            rmByte_contents_exmem = idex.ctl_rmByte;
+            
+            if(dep_exmem == 2) begin
+                regByte_contents_exmem = idex.ctl_regByte;
+            end
+
             if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191)) begin         //   Mov Imm 
                 //regfile[idex.ctl_rmByte] = idex.data_imm;
                 alu_result_exmem = idex.data_imm;
-                rmByte_contents_exmem = idex.ctl_rmByte;
+                //$write("alu %0h rmByte %0h", alu_result_exmem, rmByte_contents_exmem);
             end
 
-            if(idex.ctl_opcode == 137) begin // Move reg to reg
-                rmByte_contents_exmem = idex.ctl_rmByte;
+            else if(idex.ctl_opcode == 137) begin // Move reg to reg
                 alu_result_exmem = regfile[idex.ctl_regByte];
             end
 
-            if(opcode_group[idex.ctl_opcode] != 0) begin
+            else if(opcode_group[idex.ctl_opcode] != 0) begin
                 if(idex.ctl_regByte == 4) begin
                     //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
                     //regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
-                    rmByte_contents_exmem = idex.ctl_rmByte;
                     alu_result_exmem = idex.data_imm & idex.data_regA;
                 end
                 else if(idex.ctl_regByte == 1) begin
                     //regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
-                    rmByte_contents_exmem = idex.ctl_rmByte;
                     alu_result_exmem = idex.data_imm | idex.data_regA;
                 end
                 else if(idex.ctl_regByte == 0) begin
                     ext_addReg = {65{1'b0}};
                     ext_addReg = idex.data_imm + idex.data_regA;
-                    rmByte_contents_exmem = idex.ctl_rmByte;
                     alu_result_exmem = ext_addReg[0:63];
                     rflags.cf = ext_addReg[64];
                 end
             end
 
-            if (idex.ctl_opcode == 13) begin
+            else if (idex.ctl_opcode == 13) begin
                 // OR instruction with immediate operands
                 //regfile[0] = idex.data_imm | idex.data_regA;
                 alu_result_exmem = idex.data_imm | idex.data_regA;
                 rmByte_contents_exmem = 0;
             end
 
-            if (idex.ctl_opcode == 9 ) begin
+            else if (idex.ctl_opcode == 9 ) begin
                 // OR instruction with reg operands 
+  //              $write("alu %0h %0h",idex.data_regA, idex.data_regB);
                 alu_result_exmem = idex.data_regA | idex.data_regB;
-                rmByte_contents_exmem = idex.ctl_rmByte;
             end
 
-            if (idex.ctl_opcode == 1 ) begin
+            else if (idex.ctl_opcode == 1 ) begin
                 // Add instruction 
                 alu_result_exmem = idex.data_regA + idex.data_regB;;
-                rmByte_contents_exmem = idex.ctl_rmByte;
             end
 
-            if (idex.ctl_opcode == 247 ) begin
+            else if (idex.ctl_opcode == 247 ) begin
                 // IMUL instruction "RDX:RAX = RAX * REG64"
 
                 // Sign extend 64 bit register values to 128 bit
@@ -1339,6 +1355,7 @@ module Core (
     always_comb begin
         if (can_writeback) begin
             regfile[exmem.ctl_rmByte] = exmem.alu_result;
+            dep_exmem = 0;
         end
 
     end
@@ -1351,6 +1368,7 @@ module Core (
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
 
             can_execute <= 0;
+
             if (can_decode) begin
 
                 // Decoder is detecting a dependency
@@ -1360,7 +1378,7 @@ module Core (
                     score_board[rmByte_contents] <= 1;
                 end
                 else if(dependency == 2) begin
-                    //$write("BOOM BOOM\n");
+//                    $write("BOOM BOOM %s %s\n",reg_table_64[rmByte_contents], reg_table_64[regByte_contents]);
                     score_board[rmByte_contents] <= 1;
                     score_board[regByte_contents] <= 1;
                 end
@@ -1378,6 +1396,7 @@ module Core (
                 idex.ctl_opcode <= opcode_contents;
                 idex.ctl_rmByte <= rmByte_contents;
                 idex.ctl_regByte <= regByte_contents;
+                //$write("setting dep = %0h",dependency);
                 idex.ctl_dep <= dependency;
                 can_execute <= 1;
             end
@@ -1392,9 +1411,13 @@ module Core (
                 exmem.data_regB <= regB_contents_exmem;
                 exmem.ctl_rmByte <= rmByte_contents_exmem;
                 exmem.ctl_regByte <= regByte_contents_exmem;
+                //$write("rmByte %0h regByte %0h depEXMEMEEMEMEMEME %0h",rmByte_contents_exmem, regByte_contents_exmem, dep_exmem);
                 score_board[rmByte_contents_exmem] <= 0;
-                if(dep_exmem == 2)
+                    $write("alu result = %0h setting %0h to 0",alu_result_exmem, rmByte_contents_exmem);
+                if(dep_exmem == 2) begin
+                    $write("setting %0h to 0",regByte_contents_exmem);
                     score_board[regByte_contents_exmem] <= 0;
+                end
                 can_writeback <= 1;
             end
 
