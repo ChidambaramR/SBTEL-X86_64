@@ -34,11 +34,13 @@ module Core (
     logic [0:15][0:3][0:7] reg_table_64;
     logic [0:7][0:7]empty_str = {"       "};
     logic [0:8] i = 0;
-    logic [0:3] j = 0;
+    logic [0:4] j = 0;
     logic [0:63] prog_addr;
     logic [0:63] prog_addr_exmem;
     logic [0:1]  dep_exmem;
     logic [0:63] temp_crr;
+    logic sim_end_signal; // Variable to keep track of simulation ending
+    logic sim_end_signal_exmem; // Variable to keep track of simulation ending
 
     // 2D Array
     logic [0:8*8-1] shared_opcode[0:14][0:8];
@@ -580,6 +582,7 @@ module Core (
         logic [0:3]  ctl_regByte;
         logic [0:3]  ctl_rmByte;
         logic [0:1]  ctl_dep;
+        logic sim_end;
     } ID_EX;
 
     // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -596,6 +599,7 @@ module Core (
         logic [0:7]  ctl_opcode;
         logic [0:3]  ctl_regByte;
         logic [0:3]  ctl_rmByte;
+        logic sim_end;
     } EX_MEM;
 
     /*
@@ -829,7 +833,6 @@ module Core (
                         dependency = 1;
                     end
                     else begin
-                        $write("scre board occupied");
                         can_decode = 0;
                         enable_execute = 0;
                         offset = 0;
@@ -1006,7 +1009,6 @@ module Core (
                                 regA_contents = regfile[regByte];
                                 regB_contents = regfile[rmByte];
                                 imm_contents = {64{1'b0}};
-                                $write("regByte = %0h rmByte = %0h",regByte_contents, rmByte_contents);
                                 dependency = 2;
                             end
                             else begin
@@ -1255,8 +1257,12 @@ module Core (
             bytes_decoded_this_cycle =+ offset;
 
             // Note: Currently we finish on retq instruction. Later we might want to change below condition.
-            if (instr_buffer == "retq    ")
-                $finish;
+            if (instr_buffer == "retq    ") begin
+                can_decode = 0;
+                sim_end_signal = 1; // Simulation should end
+            end
+            else
+                sim_end_signal = 0; // Simulation should not end
 
         end else begin
             enable_execute = 0;
@@ -1275,6 +1281,7 @@ module Core (
         if (can_execute) begin : execute_block
 
             dep_exmem = idex.ctl_dep;
+            sim_end_signal_exmem = idex.sim_end;
             rmByte_contents_exmem = idex.ctl_rmByte;
             
             if(dep_exmem == 2) begin
@@ -1356,6 +1363,8 @@ module Core (
         if (can_writeback) begin
             regfile[exmem.ctl_rmByte] = exmem.alu_result;
             dep_exmem = 0;
+            if(exmem.sim_end == 1)
+                $finish;
         end
 
     end
@@ -1398,6 +1407,7 @@ module Core (
                 idex.ctl_regByte <= regByte_contents;
                 //$write("setting dep = %0h",dependency);
                 idex.ctl_dep <= dependency;
+                idex.sim_end <= sim_end_signal;
                 can_execute <= 1;
             end
 
@@ -1411,11 +1421,10 @@ module Core (
                 exmem.data_regB <= regB_contents_exmem;
                 exmem.ctl_rmByte <= rmByte_contents_exmem;
                 exmem.ctl_regByte <= regByte_contents_exmem;
+                exmem.sim_end <= sim_end_signal_exmem; 
                 //$write("rmByte %0h regByte %0h depEXMEMEEMEMEMEME %0h",rmByte_contents_exmem, regByte_contents_exmem, dep_exmem);
                 score_board[rmByte_contents_exmem] <= 0;
-                    $write("alu result = %0h setting %0h to 0",alu_result_exmem, rmByte_contents_exmem);
                 if(dep_exmem == 2) begin
-                    $write("setting %0h to 0",regByte_contents_exmem);
                     score_board[regByte_contents_exmem] <= 0;
                 end
                 can_writeback <= 1;
