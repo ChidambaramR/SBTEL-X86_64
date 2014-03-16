@@ -591,6 +591,7 @@ module Core (
         logic [0:63] pc_contents;
         // ALU Result
         logic [0:63] alu_result;
+        logic [0:63] alu_ext_result;
         // REGB Contents
         logic [0:63] data_regB;
         // Control signals
@@ -643,9 +644,11 @@ module Core (
 
     // Temporary values to be given to the EXMEM pipeline register
     logic[0 : 63] alu_result_exmem;
+    logic[0 : 63] alu_ext_result_exmem;
     logic[0 : 63] regB_contents_exmem;
     logic[0 : 4-1] regByte_contents_exmem;
     logic[0 : 4-1] rmByte_contents_exmem;
+    logic[0 : 8-1] opcode_exmem;
 
 
 
@@ -972,13 +975,16 @@ module Core (
                              * Case for IMUL instruction
                              */
                             reg_buffer[0:31] = {reg_table_64[rmByte]};
-                            if(score_board[rmByte] == 0) begin
-                                regByte_contents = regByte;
+                            if(score_board[rmByte] == 0 && score_board[0] == 0) begin
+                                // Both RAX and dest register should be available
+                                // If we reach here, we are good
+                                //regByte_contents = regByte;
+                                regByte_contents = 0;
                                 rmByte_contents = rmByte;
                                 regA_contents = regfile[rmByte];
-                                regB_contents = {64{1'b0}};
+                                regB_contents = regfile[0]; // HACK. We cannot directly use regfile[0] in ALU
                                 imm_contents = {64{1'b0}};
-                                dependency = 1;
+                                dependency = 2;
                             end
                             else begin
                                 offset = 0;
@@ -1283,7 +1289,8 @@ module Core (
             dep_exmem = idex.ctl_dep;
             sim_end_signal_exmem = idex.sim_end;
             rmByte_contents_exmem = idex.ctl_rmByte;
-            
+            opcode_exmem = idex.ctl_opcode;
+
             if(dep_exmem == 2) begin
                 regByte_contents_exmem = idex.ctl_regByte;
             end
@@ -1338,17 +1345,17 @@ module Core (
                 // IMUL instruction "RDX:RAX = RAX * REG64"
 
                 // Sign extend 64 bit register values to 128 bit
-                data_regAA = {{64{regfile[0][0]}}, regfile[0]}; 
+                data_regAA = {{64{idex.data_regB[0]}}, idex.data_regB}; 
                 data_regBB = {{64{idex.data_regA[0]}}, idex.data_regA};
 
                 // 128 bit multiplication
                 temp16 = data_regAA * data_regBB;
-
+                $write("temp16 = %0h",temp16);
                 // Store result into RDX:RAX
                 //regfile[0] = temp16[64:127];
                 //regfile[2] = temp16[0:63];
                 alu_result_exmem = temp16[0:63];
-                rmByte_contents_exmem = 0;
+                alu_ext_result_exmem = temp16[64:127];
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
             prog_addr_exmem = idex.pc_contents;
@@ -1361,7 +1368,13 @@ module Core (
 
     always_comb begin
         if (can_writeback) begin
-            regfile[exmem.ctl_rmByte] = exmem.alu_result;
+            if(exmem.ctl_opcode == 247) begin
+                regfile[0] = exmem.alu_ext_result;
+                regfile[2] = exmem.alu_result;
+            end 
+            else begin
+                regfile[exmem.ctl_rmByte] = exmem.alu_result;
+            end
             dep_exmem = 0;
             if(exmem.sim_end == 1)
                 $finish;
@@ -1418,10 +1431,12 @@ module Core (
                 */
                 exmem.pc_contents <= prog_addr_exmem;
                 exmem.alu_result <= alu_result_exmem;
+                exmem.alu_ext_result <= alu_ext_result_exmem;
                 exmem.data_regB <= regB_contents_exmem;
                 exmem.ctl_rmByte <= rmByte_contents_exmem;
                 exmem.ctl_regByte <= regByte_contents_exmem;
                 exmem.sim_end <= sim_end_signal_exmem; 
+                exmem.ctl_opcode <= opcode_exmem;
                 //$write("rmByte %0h regByte %0h depEXMEMEEMEMEMEME %0h",rmByte_contents_exmem, regByte_contents_exmem, dep_exmem);
                 score_board[rmByte_contents_exmem] <= 0;
                 if(dep_exmem == 2) begin
