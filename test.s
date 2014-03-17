@@ -1,1 +1,6 @@
-and $0x12, %rbx
+mov $0xfffffffffff, %rbx
+shl $0x10, %rbx
+shr $0x10, %rbx
+shr $0x10, %rbx
+shr $0x10, %rbx
+shr $0x10, %rbx

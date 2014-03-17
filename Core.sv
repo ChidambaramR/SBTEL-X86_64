@@ -236,6 +236,11 @@ module Core (
         
         /*
          * Opcode for SHL and SHR
+         * In Mod R/M Byte,
+         * If reg = 4, then 
+         *       SHIFT Left 
+         *   else if reg = 5
+         *       SHIFT Right
          */
         opcode_char[193] = "shr     "; opcode_enc[193] = "MI ";
         opcode_char[209] = "shr     "; opcode_enc[209] = "M1 ";
@@ -872,6 +877,15 @@ module Core (
                         space_buffer[(offset)*8 +: 1*8] = imm_byte[0:7];
                         offset += 1;
                         reg_buffer[0:87] = {{"$0x"}, {byte1_to_str(imm_byte[0:7])}, {", "}, {reg_table_64[rmByte]}};
+                        if(score_board[rmByte] == 0) begin
+                            //$write("Inside MI");
+                            //regByte_contents = regByte;
+                            rmByte_contents = rmByte;
+                            regA_contents = regfile[rmByte];
+                            regB_contents = {{61{1'b0}}, {modRM_byte.reg1}};
+                            imm_contents = {{56{1'b0}}, {imm_byte[0:7]}};
+                            dependency = 1;
+                        end
                     end
                     /* No Test Case for mod encode = M1 or MC */
                     else if (opcode_enc_byte == "M1 ") begin
@@ -1356,6 +1370,32 @@ module Core (
                 //regfile[2] = temp16[0:63];
                 alu_result_exmem = temp16[0:63];
                 alu_ext_result_exmem = temp16[64:127];
+            end
+            else if ((idex.ctl_opcode == 193 ) || (idex.ctl_opcode == 209 ) || (idex.ctl_opcode == 211 ))  begin
+                // SHR & SHL instruction is with reg operands 
+                /*
+                 * Opcode for SHL and SHR
+                 * In Mod R/M Byte,
+                 * If reg = 4, then 
+                 *       SHIFT Left 
+                 *   else if reg = 5
+                 *       SHIFT Right
+                 */
+                alu_result_exmem = {idex.data_regA};
+                if (idex.data_regB == 4)
+                    begin
+                        for (i = 0; i < idex.data_imm; i = i+1)
+                        begin
+                            alu_result_exmem = alu_result_exmem * 2;
+                        end
+                    end
+                else
+                    begin
+                        for (i = 0; i < idex.data_imm; i=i+1)
+                        begin
+                            alu_result_exmem = alu_result_exmem / 2;
+                        end
+                    end
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
             prog_addr_exmem = idex.pc_contents;
