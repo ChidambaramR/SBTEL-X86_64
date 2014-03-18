@@ -1,6 +1,6 @@
 .PHONY: run clean submit
 
-RUNELF=$(PWD)/prog4
+RUNELF=$(PWD)/prog3
 
 TRACE=--trace
 

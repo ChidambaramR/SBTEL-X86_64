@@ -1279,6 +1279,7 @@ module Core (
             // Note: Currently we finish on retq instruction. Later we might want to change below condition.
             if (instr_buffer == "retq    ") begin
                 can_decode = 0;
+                enable_execute = 0;
                 sim_end_signal = 1; // Simulation should end
             end
             else
@@ -1332,7 +1333,8 @@ module Core (
                 else if(idex.ctl_regByte == 0) begin
                     ext_addReg = {65{1'b0}};
                     ext_addReg = idex.data_imm + idex.data_regA;
-                    alu_result_exmem = ext_addReg[0:63];
+                    //$write("data_imm = %0h, data_regA = %0h ext_addReg = %0h",idex.data_imm, idex.data_regA, ext_addReg[1:64]);
+                    alu_result_exmem = ext_addReg[1:64];
                     rflags.cf = ext_addReg[64];
                 end
             end
@@ -1364,12 +1366,12 @@ module Core (
 
                 // 128 bit multiplication
                 temp16 = data_regAA * data_regBB;
-                $write("temp16 = %0h",temp16);
+                //$write("temp16 = %0h",temp16);
                 // Store result into RDX:RAX
                 //regfile[0] = temp16[64:127];
                 //regfile[2] = temp16[0:63];
-                alu_result_exmem = temp16[0:63];
-                alu_ext_result_exmem = temp16[64:127];
+                alu_ext_result_exmem = temp16[0:63];
+                alu_result_exmem = temp16[64:127];
             end
             else if ((idex.ctl_opcode == 193 ) || (idex.ctl_opcode == 209 ) || (idex.ctl_opcode == 211 ))  begin
                 // SHR & SHL instruction is with reg operands 
@@ -1409,8 +1411,8 @@ module Core (
     always_comb begin
         if (can_writeback) begin
             if(exmem.ctl_opcode == 247) begin
-                regfile[0] = exmem.alu_ext_result;
-                regfile[2] = exmem.alu_result;
+                regfile[0] = exmem.alu_result;
+                regfile[2] = exmem.alu_ext_result;
             end 
             else begin
                 regfile[exmem.ctl_rmByte] = exmem.alu_result;
