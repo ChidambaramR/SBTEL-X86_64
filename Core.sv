@@ -35,8 +35,8 @@ module Core (
     logic [0:7][0:7]empty_str = {"       "};
     logic [0:8] i = 0;
     logic [0:4] j = 0;
-    logic [0:63] prog_addr;
-    logic [0:63] prog_addr_exmem;
+    logic [0:63] rip;
+    logic [0:63] rip_exmem;
     logic [0:1]  dep_exmem;
     logic [0:63] temp_crr;
     logic sim_end_signal; // Variable to keep track of simulation ending
@@ -49,6 +49,7 @@ module Core (
     logic [0:15*8-1] space_buffer;
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
+    logic [0:63] prog_start;
 
     logic can_execute;
     logic can_writeback;
@@ -58,7 +59,9 @@ module Core (
 
     initial 
     begin
-        
+       
+        prog_start = entry ;
+
         for (i = 0; i < 256; i++)
         begin
             opcode_char[i] = empty_str;
@@ -330,6 +333,10 @@ module Core (
             send_fetch_req = 0; // hack: still idle, but already got ack (in theory, we could try to send another request as early as this)
         end else begin
             send_fetch_req = (fetch_offset - decode_offset < 7'd32);
+            if(jump_signal && !bus.respcyc) begin
+                jump_flag = 0;
+                send_fetch_req = 1;
+            end
         end
     end
     
@@ -368,22 +375,39 @@ module Core (
             */
             bus.req <= fetch_rip & ~63;
             bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
+
+            if(!jump_flag)
+                    jump_signal <= 0;
     
             if (bus.respcyc) begin
-                /*
-                * It takes around 48 micro seconds for a response to come back.
-                */
-                assert(!send_fetch_req) else $fatal;
-                fetch_state <= fetch_active;
-                fetch_rip <= fetch_rip + 8;
-                if (fetch_skip > 0) begin
+                if(!jump_flag) begin
                     /*
-                    * Fetch skip is up only when there is a response for the first time. 
+                    * It takes around 48 micro seconds for a response to come back.
                     */
-                    fetch_skip <= fetch_skip - 8;
-                end else begin
-                    decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
-                    fetch_offset <= fetch_offset + 8;
+                    assert(!send_fetch_req) else $fatal;
+                    fetch_state <= fetch_active;
+                    fetch_rip <= fetch_rip + 8;
+                    if ((fetch_skip) > 0) begin
+                        /*
+                        * Fetch skip is up only when there is a response for the first time. 
+                        */
+                        fetch_skip <= fetch_skip - 8;
+                    end else begin
+                        decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
+                        fetch_offset <= fetch_offset + 8;
+                    end
+                end
+                else begin
+                    /*
+                    * A jump is found and we need to resteer the fetch
+                    */
+                    fetch_rip <= jump_target;
+                    decode_buffer <= 0;
+                    jump_rip <= (entry + (jump_target - prog_start));
+                    /* verilator lint_off WIDTH */
+                    fetch_skip <= (jump_rip[58:63])&(~7);
+                    fetch_offset <= 0;
+                    jump_signal <= 1;
                 end
             end else begin
                 if (fetch_state == fetch_active) begin
@@ -688,16 +712,21 @@ module Core (
     rex rex_prefix;
     mod_rm modRM_byte;
 
+    logic jump_flag;
+    logic jump_signal;
+    logic[0 : 63] jump_target;
+    logic[0 : 63] jump_rip;
+
     /* verilator lint_off UNUSED */
     ID_EX idex;
     EX_MEM exmem;
     flags_reg rflags;
 
     always_comb begin
-            if(can_writeback == 1)
-                can_decode = 0;
+        if(can_writeback == 1)
+            can_decode = 0;
 
-        if (can_decode) begin : decode_block
+        if (can_decode && !jump_signal) begin : decode_block
             // Variables which are to be reset for each new decoding
             offset = 0;
             opcode_enc_byte = 0;
@@ -708,13 +737,14 @@ module Core (
             low_byte = 0;
             rex_prefix = 0;
             prefix = 0;
+            jump_target = 0;
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
             end
             instr_buffer = empty_str; 
    
             // Compute program address for next instruction
-            prog_addr = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
+            rip = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
 
             /*
              * Prefix decoding
@@ -1241,8 +1271,14 @@ module Core (
                         offset += 1;
                          
                         disp_byte = {{24{short_disp_byte[0]}}, {short_disp_byte}};
-                        temp_crr = rel_to_abs_addr(prog_addr, disp_byte, offset);
+                        temp_crr = rel_to_abs_addr(rip, disp_byte, offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                        jump_flag = 1;
+                        can_decode = 0;
+                        bytes_decoded_this_cycle = 0;
+                        offset = 0;
+                        enable_execute = 0;
+                        jump_target = temp_crr;
                     end
 
                     else if (opcode_enc_byte == "D4 ") begin
@@ -1253,7 +1289,7 @@ module Core (
                         space_buffer[(offset)*8 +: 4*8] = disp_byte;
                         offset += 4;
      
-                        temp_crr = rel_to_abs_addr(prog_addr, byte_swap(disp_byte), offset);
+                        temp_crr = rel_to_abs_addr(rip, byte_swap(disp_byte), offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                     end
                 end
@@ -1265,7 +1301,7 @@ module Core (
             // Print Instruction Encoding for non empty opcode_char[] entries
             // Also enable execution phase only if decoder can correctly decode the bytes
             if ((instr_buffer != empty_str) && can_decode) begin
-                $write("  %0h:    ", prog_addr);
+                $write("  %0h:    ", rip);
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
                 enable_execute = 1;
@@ -1400,7 +1436,7 @@ module Core (
                     end
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
-            prog_addr_exmem = idex.pc_contents;
+            rip_exmem = idex.pc_contents;
             enable_writeback = 1;
         end
         else
@@ -1429,7 +1465,10 @@ module Core (
             decode_offset <= 0;
             decode_buffer <= 0;
         end else begin // !bus.reset
-            decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
+            if(!jump_flag)
+                decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
+            else
+                decode_offset <= 0;
 
             can_execute <= 0;
 
@@ -1452,7 +1491,7 @@ module Core (
                 /*
                 * Giving to the pipeline register of ALU
                 */
-                idex.pc_contents <= prog_addr;
+                idex.pc_contents <= rip;
                 idex.data_regA <= regA_contents;
                 idex.data_regB <= regB_contents;
                 idex.data_disp <= disp_contents;
@@ -1471,7 +1510,7 @@ module Core (
                 /*
                 * Giving to the write back stage of the processor
                 */
-                exmem.pc_contents <= prog_addr_exmem;
+                exmem.pc_contents <= rip_exmem;
                 exmem.alu_result <= alu_result_exmem;
                 exmem.alu_ext_result <= alu_ext_result_exmem;
                 exmem.data_regB <= regB_contents_exmem;
@@ -1508,5 +1547,6 @@ module Core (
             $display("R13 = 0x%0h", regfile[13]);
             $display("R14 = 0x%0h", regfile[14]);
             $display("R15 = 0x%0h", regfile[15]);
+            $display("RIP = 0x%0h", rip);
     end
 endmodule
