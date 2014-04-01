@@ -396,11 +396,26 @@ module Core (
                         */
                         fetch_skip <= fetch_skip - 8;
                     end else begin
-                        decode_buffer[(fetch_offset)*8 +: 64] <= bus.resp;
-                        $display("orig resp %x",bus.resp);
-                        $display("resp %x io = %x",bus.resp[(internal_offset)*8:63], internal_offset);
+                        if(internal_offset == 0)
+                          decode_buffer[(fetch_offset)*8 +: 64] <= bus.resp;
+                        else if(internal_offset == 1)
+                          decode_buffer[(fetch_offset)*8 +: 56] <= bus.resp[55:0];
+                        else if(internal_offset == 2)
+                          decode_buffer[(fetch_offset)*8 +: 48] <= bus.resp[47:0];
+                        else if(internal_offset == 3)
+                          decode_buffer[(fetch_offset)*8 +: 40] <= bus.resp[39:0];
+                        else if(internal_offset == 4)
+                          decode_buffer[(fetch_offset)*8 +: 32] <= bus.resp[31:0];
+                        else if(internal_offset == 5)
+                          decode_buffer[(fetch_offset)*8 +: 24] <= bus.resp[23:0];
+                        else if(internal_offset == 6)
+                          decode_buffer[(fetch_offset)*8 +: 16] <= bus.resp[15:0];
+                        else if(internal_offset == 7)
+                          decode_buffer[(fetch_offset)*8 +: 8] <= bus.resp[7:0];
+//                        $display("orig resp %x",bus.resp);
+//                        $display("resp %x io = %x",bus.resp[55:0], internal_offset);
                         //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
-                        fetch_offset <= fetch_offset + 8;
+                        fetch_offset <= fetch_offset - internal_offset + 8;
                         internal_offset <= 0;
                     end
                 end
@@ -1281,9 +1296,7 @@ module Core (
                         temp_crr = rel_to_abs_addr(rip, disp_byte, offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                         jump_flag = 1;
-                        can_decode = 0;
                         bytes_decoded_this_cycle = 0;
-                        offset = 0;
                         enable_execute = 0;
                         jump_target = temp_crr;
                     end
@@ -1312,6 +1325,8 @@ module Core (
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
                 enable_execute = 1;
+                if(jump_flag == 1)
+                      can_decode = 0;
             end
             else begin
                 enable_execute = 0;
