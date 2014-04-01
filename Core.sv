@@ -10,6 +10,7 @@ module Core (
     logic[6:0] fetch_offset, decode_offset;
     logic[0:63] regfile[0:16-1];
     logic score_board[0:16-1];
+    logic[0:6] num;
     
 
     /*
@@ -50,6 +51,7 @@ module Core (
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
     logic [0:63] prog_start;
+    logic [0:63] internal_offset;
 
     logic can_execute;
     logic can_writeback;
@@ -349,6 +351,7 @@ module Core (
             fetch_rip <= entry & ~63;
             fetch_skip <= entry[5:0];
             fetch_offset <= 0;
+            internal_offset <= 0;
     
         end else begin // !bus.reset
     
@@ -393,19 +396,24 @@ module Core (
                         */
                         fetch_skip <= fetch_skip - 8;
                     end else begin
-                        decode_buffer[fetch_offset*8 +: 64] <= bus.resp;
+                        decode_buffer[(fetch_offset)*8 +: 64] <= bus.resp;
+                        $display("orig resp %x",bus.resp);
+                        $display("resp %x io = %x",bus.resp[(internal_offset)*8:63], internal_offset);
+                        //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
                         fetch_offset <= fetch_offset + 8;
+                        internal_offset <= 0;
                     end
                 end
                 else begin
                     /*
                     * A jump is found and we need to resteer the fetch
                     */
-                    fetch_rip <= jump_target;
+                    fetch_rip <= (jump_target & ~63);
                     decode_buffer <= 0;
-                    jump_rip <= (entry + (jump_target - prog_start));
                     /* verilator lint_off WIDTH */
-                    fetch_skip <= (jump_rip[58:63])&(~7);
+                    fetch_skip <= (jump_target[58:63])&(~7);
+                    internal_offset <= (jump_target[58:63])&(7);
+                    //$write("io = %0h fs = %0h",internal_offset,fetch_skip);
                     fetch_offset <= 0;
                     jump_signal <= 1;
                 end
@@ -715,7 +723,6 @@ module Core (
     logic jump_flag;
     logic jump_signal;
     logic[0 : 63] jump_target;
-    logic[0 : 63] jump_rip;
 
     /* verilator lint_off UNUSED */
     ID_EX idex;
