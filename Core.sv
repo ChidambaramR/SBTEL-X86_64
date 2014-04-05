@@ -10,7 +10,6 @@ module Core (
     logic[6:0] fetch_offset, decode_offset;
     logic[0:63] regfile[0:16-1];
     logic score_board[0:16-1];
-    logic[0:6] num;
     
 
     /*
@@ -46,7 +45,6 @@ module Core (
     logic [0:15*8-1] space_buffer;
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
-    logic [0:63] prog_start;
     logic [0:63] internal_offset;
 
     logic can_memstage;
@@ -59,8 +57,6 @@ module Core (
     initial 
     begin
        
-        prog_start = entry ;
-
         for (i = 0; i < 256; i++)
         begin
             opcode_char[i] = empty_str;
@@ -177,6 +173,7 @@ module Core (
         opcode_char[232] = "callq   "; opcode_enc[232] = "D4 "; // E8
         opcode_char[233] = "jmpq    "; opcode_enc[233] = "D4 "; // E9
         opcode_char[235] = "jmp     "; opcode_enc[235] = "D1 "; // EB
+        opcode_char[125] = "jge     "; opcode_enc[125] = "D1 "; // EB
         opcode_char[255] = "callq   "; opcode_enc[255] = "M  "; // FF 
         
         /*
@@ -376,8 +373,6 @@ module Core (
             bus.req <= fetch_rip & ~63;
             bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
 
-            if(!jump_flag)
-                jump_signal <= 0;
     
             if (bus.respcyc) begin
                 if(!jump_flag) begin
@@ -430,6 +425,26 @@ module Core (
                     jump_signal <= 1;
                 end
             end else begin
+                // Handling the jump signal when no response in the bus
+                if(!jump_flag)
+                    jump_signal <= 0;
+                else begin
+                    /*
+                    * A jump is found and we need to resteer the fetch
+                    */
+                    fetch_rip <= (jump_target & ~63);
+                    decode_buffer <= 0;
+                    /* verilator lint_off WIDTH */
+                    fetch_skip <= (jump_target[58:63])&(~7);
+                    internal_offset <= (jump_target[58:63])&(7);
+                    //$write("io = %0h fs = %0h",internal_offset,fetch_skip);
+                    fetch_offset <= 0;
+                    jump_signal <= 1;
+                end
+
+//                if(jump_cond_flag)
+//                    fetch_rip <= (jump_target & ~63);
+
                 if (fetch_state == fetch_active) begin
                     fetch_state <= fetch_idle;
                 end else if (bus.reqack) begin
@@ -757,6 +772,8 @@ module Core (
 
     logic jump_flag;
     logic jump_signal;
+    logic jump_cond_signal;
+    logic jump_cond_flag;
     logic[0 : 63] jump_target;
 
     /* verilator lint_off UNUSED */
@@ -766,10 +783,10 @@ module Core (
     flags_reg rflags;
 
     always_comb begin
-        if(can_writeback == 1)
+        if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1)
             can_decode = 0;
 
-        if (can_decode && !jump_signal) begin : decode_block
+        if (can_decode) begin : decode_block
             // Variables which are to be reset for each new decoding
             offset = 0;
             opcode_enc_byte = 0;
@@ -1316,15 +1333,22 @@ module Core (
                         disp_byte = {{24{short_disp_byte[0]}}, {short_disp_byte}};
                         temp_crr = rel_to_abs_addr(rip, disp_byte, offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
-                        jump_flag = 1;
-                        bytes_decoded_this_cycle = 0;
-                        enable_memstage = 0;
+                        
+                        if(opcode == 235) begin
+                            bytes_decoded_this_cycle = 0;
+                            enable_memstage = 0;
+                            jump_flag = 1; // Unconditional jump
+                        end
+                        else 
+                            jump_cond_flag = 1; // Conditional jump
+                        
                         jump_target = temp_crr;
                     end
 
                     else if (opcode_enc_byte == "D4 ") begin
                         /*
                          * 4 byte relative displacement
+                         * Conditional Jumps
                          */
                         disp_byte = decode_bytes[offset*8 +: 4*8];
                         space_buffer[(offset)*8 +: 4*8] = disp_byte;
@@ -1332,6 +1356,10 @@ module Core (
      
                         temp_crr = rel_to_abs_addr(rip, byte_swap(disp_byte), offset);
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
+                        bytes_decoded_this_cycle = 0;
+                        jump_cond_flag = 1;
+                        enable_memstage = 0;
+                        jump_target = temp_crr;
                     end
                 end
             end else begin
@@ -1346,8 +1374,13 @@ module Core (
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
                 enable_memstage = 1;
-                if(jump_flag == 1)
+                if(jump_flag == 1) begin
                       can_decode = 0;
+                      enable_memstage = 0;
+                end
+                else if(jump_cond_flag == 1) begin
+                      can_decode = 0;
+                end
             end
             else begin
                 enable_memstage = 0;
@@ -1420,6 +1453,11 @@ module Core (
                 //regfile[memex.ctl_rmByte] = memex.data_imm;
                 alu_result_exwb = memex.data_imm;
                 //$write("alu %0h rmByte %0h", alu_result_exwb, rmByte_contents_exwb);
+            end
+
+            else if(memex.ctl_opcode == 141 || memex.ctl_opcode == 125) begin
+                // JGE instruction
+                jump_cond_flag = 0;
             end
 
             else if(memex.ctl_opcode == 137) begin // Move reg to reg
@@ -1504,7 +1542,15 @@ module Core (
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
             rip_exwb = memex.pc_contents;
-            enable_writeback = 1;
+            if(memex.ctl_opcode != 125) begin
+                /*
+                * We dont want the write back stage for conditional jumps.
+                * We just want the ALU to execute and set the flags for resteering the fetch
+                */
+                enable_writeback = 1;
+            end
+            else
+                enable_writeback = 0;
         end
         else
             enable_writeback = 0;
@@ -1533,8 +1579,15 @@ module Core (
         end else begin // !bus.reset
             if(!jump_flag)
                 decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
-            else
+            else begin
                 decode_offset <= 0;
+                fetch_offset <= 0;
+            end
+
+            if(jump_cond_flag)
+                jump_cond_signal <= 1;
+            else
+                jump_cond_signal <= 0;
 
             if (can_decode) begin
 
