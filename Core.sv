@@ -36,12 +36,8 @@ module Core (
     logic [0:7][0:7]empty_str = {"       "};
     logic [0:8] i = 0;
     logic [0:4] j = 0;
-    logic [0:63] rip;
-    logic [0:63] rip_exmem;
-    logic [0:1]  dep_exmem;
     logic [0:63] temp_crr;
-    logic sim_end_signal; // Variable to keep track of simulation ending
-    logic sim_end_signal_exmem; // Variable to keep track of simulation ending
+
 
     // 2D Array
     logic [0:8*8-1] shared_opcode[0:14][0:8];
@@ -53,11 +49,12 @@ module Core (
     logic [0:63] prog_start;
     logic [0:63] internal_offset;
 
+    logic can_memstage;
     logic can_execute;
     logic can_writeback;
+    logic enable_memstage;
     logic enable_execute;
     logic enable_writeback;
-    logic[0:1] dependency;
 
     initial 
     begin
@@ -380,7 +377,7 @@ module Core (
             bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
 
             if(!jump_flag)
-                    jump_signal <= 0;
+                jump_signal <= 0;
     
             if (bus.respcyc) begin
                 if(!jump_flag) begin
@@ -635,7 +632,25 @@ module Core (
         logic [0:3]  ctl_rmByte;
         logic [0:1]  ctl_dep;
         logic sim_end;
-    } ID_EX;
+    } ID_MEM;
+
+    // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+    typedef struct packed {
+        // PC + 1
+        logic [0:63] pc_contents;
+        // REGA Contents
+        logic [0:63] data_regA;
+        // REGB Contents
+        logic [0:63] data_regB;
+        // Control signals
+        logic [0:63] data_disp;
+        logic [0:63] data_imm;
+        logic [0:7]  ctl_opcode;
+        logic [0:3]  ctl_regByte;
+        logic [0:3]  ctl_rmByte;
+        logic [0:1]  ctl_dep;
+        logic sim_end;
+    } MEM_EX;
 
     // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
     typedef struct packed {
@@ -653,7 +668,7 @@ module Core (
         logic [0:3]  ctl_regByte;
         logic [0:3]  ctl_rmByte;
         logic sim_end;
-    } EX_MEM;
+    } EX_WB;
 
     /*
     * Refer to wiki page of RFLAGS for the bit pattern
@@ -675,35 +690,40 @@ module Core (
     } flags_reg;
   
 
-//    logic[0 : (8*8)+(8*8)+(8*8)+(8*8)+(8*8)+(8-1)] IDEX; // PIPELINE REGISTER
-    // Temporary values which will be stored in the IDEX pipeline register
+    // Temporary values which will be stored in the IDMEM pipeline register
+    logic [0:63] rip;
     logic[0 : 63] regA_contents;
     logic[0 : 63] regB_contents;
     logic[0 : 63] disp_contents;
     logic[0 : 63] imm_contents;
     logic[0 : 7] opcode_contents;
+    logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
+    logic[0 : 4-1] regByte_contents;    // 4 bit Register A INDEX for the ALU
+    logic[0 :1] dependency;
+    logic sim_end_signal;               // Variable to keep track of simulation ending
 
-    logic[0 : 127] data_regAA;
-    logic[0 : 127] data_regBB;
+    // Temporary values which will be stored in the MEMEX pipeline register
+    logic [0:63] rip_memex;
+    logic[0 : 63] regA_contents_memex;
+    logic[0 : 63] regB_contents_memex;
+    logic[0 : 63] disp_contents_memex;
+    logic[0 : 63] imm_contents_memex;
+    logic[0 : 7] opcode_contents_memex;
+    logic[0 : 4-1] rmByte_contents_memex;     // 4 bit Register B INDEX for the ALU
+    logic[0 : 4-1] regByte_contents_memex;    // 4 bit Register A INDEX for the ALU
+    logic[0 :1] dependency_memex;
+    logic sim_end_signal_memex;               // Variable to keep track of simulation ending
 
-    logic[0 : 16*8-1] temp16;
-
-    logic[0 : 4-1] regByte_contents; // 4 bit Register A INDEX for the ALU
-    logic[0 : 4-1] rmByte_contents; // 4 bit Register B INDEX for the ALU
-
-    logic[0 : 64] ext_addReg;
-
-
-    // Temporary values to be given to the EXMEM pipeline register
-    logic[0 : 63] alu_result_exmem;
-    logic[0 : 63] alu_ext_result_exmem;
-    logic[0 : 63] regB_contents_exmem;
-    logic[0 : 4-1] regByte_contents_exmem;
-    logic[0 : 4-1] rmByte_contents_exmem;
-    logic[0 : 8-1] opcode_exmem;
-
-
-
+    // Temporary values to be given to the EXWB pipeline register
+    logic [0:63] rip_exwb;
+    logic [0:1]  dep_exwb;
+    logic sim_end_signal_exwb;
+    logic[0 : 63] alu_result_exwb;
+    logic[0 : 63] alu_ext_result_exwb;
+    logic[0 : 63] regB_contents_exwb;
+    logic[0 : 4-1] regByte_contents_exwb;
+    logic[0 : 4-1] rmByte_contents_exwb;
+    logic[0 : 8-1] opcode_exwb;
 
     /*
     All deifinitions (state elements) for DECODER goes here
@@ -740,8 +760,9 @@ module Core (
     logic[0 : 63] jump_target;
 
     /* verilator lint_off UNUSED */
-    ID_EX idex;
-    EX_MEM exmem;
+    ID_MEM idmem;
+    MEM_EX memex;
+    EX_WB exwb;
     flags_reg rflags;
 
     always_comb begin
@@ -825,7 +846,7 @@ module Core (
                     else begin
                         offset = 0;
                         can_decode = 0;
-                        enable_execute = 0;
+                        enable_memstage = 0;
                     end
 
                 end
@@ -861,7 +882,7 @@ module Core (
                     else begin
                         offset = 0;
                         can_decode = 0;
-                        enable_execute = 0;
+                        enable_memstage = 0;
                     end
 
                 end // End of Opcode for Special PUSH/POP block
@@ -894,7 +915,7 @@ module Core (
                     end
                     else begin
                         can_decode = 0;
-                        enable_execute = 0;
+                        enable_memstage = 0;
                         offset = 0;
                     end
 
@@ -1055,7 +1076,7 @@ module Core (
                             else begin
                                 offset = 0;
                                 can_decode = 0;
-                                enable_execute = 0;
+                                enable_memstage = 0;
                             end
                         end
                         else begin
@@ -1086,7 +1107,7 @@ module Core (
                             else begin
                                 offset = 0;
                                 can_decode = 0;
-                                enable_execute = 0;
+                                enable_memstage = 0;
                             end
 
                         end
@@ -1154,7 +1175,7 @@ module Core (
                             end
                             else begin
                                 offset = 0;
-                                enable_execute = 0;
+                                enable_memstage = 0;
                             end
 
                         end
@@ -1233,7 +1254,7 @@ module Core (
                         else begin
                             offset = 0;
                             can_decode = 0;
-                            enable_execute = 0;
+                            enable_memstage = 0;
                         end
 
                         /*
@@ -1279,7 +1300,7 @@ module Core (
                         else begin
                             offset = 0;
                             can_decode = 0;
-                            enable_execute = 0;
+                            enable_memstage = 0;
                         end
                     
                     end
@@ -1297,7 +1318,7 @@ module Core (
                         reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                         jump_flag = 1;
                         bytes_decoded_this_cycle = 0;
-                        enable_execute = 0;
+                        enable_memstage = 0;
                         jump_target = temp_crr;
                     end
 
@@ -1324,12 +1345,12 @@ module Core (
                 $write("  %0h:    ", rip);
                 print_prog_bytes(space_buffer, offset);
                 $write("%s%s\n", instr_buffer, reg_buffer);
-                enable_execute = 1;
+                enable_memstage = 1;
                 if(jump_flag == 1)
                       can_decode = 0;
             end
             else begin
-                enable_execute = 0;
+                enable_memstage = 0;
             end
 
             bytes_decoded_this_cycle =+ offset;
@@ -1337,17 +1358,38 @@ module Core (
             // Note: Currently we finish on retq instruction. Later we might want to change below condition.
             if (instr_buffer == "retq    ") begin
                 can_decode = 0;
-                enable_execute = 0;
+                enable_memstage = 0;
                 sim_end_signal = 1; // Simulation should end
             end
             else
                 sim_end_signal = 0; // Simulation should not end
 
         end else begin
-            enable_execute = 0;
+            enable_memstage = 0;
             bytes_decoded_this_cycle = 0;
         end
-      end
+    end
+
+    always_comb begin
+        if (can_memstage) begin : memstage_block
+
+            rip_memex              = idmem.pc_contents;
+            regA_contents_memex    = idmem.data_regA;
+            regB_contents_memex    = idmem.data_regB;
+            disp_contents_memex    = idmem.data_disp;
+            imm_contents_memex     = idmem.data_imm;
+            opcode_contents_memex  = idmem.ctl_opcode;
+            rmByte_contents_memex  = idmem.ctl_rmByte;
+            regByte_contents_memex = idmem.ctl_regByte;
+            dependency_memex       = idmem.ctl_dep;
+            sim_end_signal_memex   = idmem.sim_end;
+
+            enable_execute = 1;
+        end
+        else
+            enable_execute = 0;
+    end
+
   
     /*
     * This is the ALU block. Any comments about ALU add here.
@@ -1356,82 +1398,85 @@ module Core (
     *     It sets the OF and the CF flags to indiciate a carry(overflow) in the signed or unsigned result. 
           The SF indicates the sign of the signed result
     */
+
+    logic[0 : 127] data_regAA;
+    logic[0 : 127] data_regBB;
+    logic[0 : 64] ext_addReg;
+    logic[0 : 16*8-1] temp16;
+
     always_comb begin
         if (can_execute) begin : execute_block
 
-            dep_exmem = idex.ctl_dep;
-            sim_end_signal_exmem = idex.sim_end;
-            rmByte_contents_exmem = idex.ctl_rmByte;
-            opcode_exmem = idex.ctl_opcode;
+            dep_exwb = memex.ctl_dep;
+            sim_end_signal_exwb = memex.sim_end;
+            rmByte_contents_exwb = memex.ctl_rmByte;
+            opcode_exwb = memex.ctl_opcode;
 
-            if(dep_exmem == 2) begin
-                regByte_contents_exmem = idex.ctl_regByte;
+            if(dep_exwb == 2) begin
+                regByte_contents_exwb = memex.ctl_regByte;
             end
 
-            if(idex.ctl_opcode == 199 || (idex.ctl_opcode >= 184 && idex.ctl_opcode <= 191)) begin         //   Mov Imm 
-                //regfile[idex.ctl_rmByte] = idex.data_imm;
-                alu_result_exmem = idex.data_imm;
-                //$write("alu %0h rmByte %0h", alu_result_exmem, rmByte_contents_exmem);
+            if(memex.ctl_opcode == 199 || (memex.ctl_opcode >= 184 && memex.ctl_opcode <= 191)) begin         //   Mov Imm 
+                //regfile[memex.ctl_rmByte] = memex.data_imm;
+                alu_result_exwb = memex.data_imm;
+                //$write("alu %0h rmByte %0h", alu_result_exwb, rmByte_contents_exwb);
             end
 
-            else if(idex.ctl_opcode == 137) begin // Move reg to reg
-                alu_result_exmem = regfile[idex.ctl_regByte];
+            else if(memex.ctl_opcode == 137) begin // Move reg to reg
+                alu_result_exwb = regfile[memex.ctl_regByte];
             end
 
-            else if(opcode_group[idex.ctl_opcode] != 0) begin
-                if(idex.ctl_regByte == 4) begin
-                    //$display("data_imm = %0h data_regA = %0h result = %0h", idex.data_imm, idex.data_regA, (idex.data_imm & idex.data_regA));
-                    //regfile[idex.ctl_rmByte] = idex.data_imm & idex.data_regA;
-                    alu_result_exmem = idex.data_imm & idex.data_regA;
+            else if(opcode_group[memex.ctl_opcode] != 0) begin
+                if(memex.ctl_regByte == 4) begin
+                    //$display("data_imm = %0h data_regA = %0h result = %0h", memex.data_imm, memex.data_regA, (memex.data_imm & memex.data_regA));
+                    //regfile[memex.ctl_rmByte] = memex.data_imm & memex.data_regA;
+                    alu_result_exwb = memex.data_imm & memex.data_regA;
                 end
-                else if(idex.ctl_regByte == 1) begin
-                    //regfile[idex.ctl_rmByte] = idex.data_imm | idex.data_regA;
-                    alu_result_exmem = idex.data_imm | idex.data_regA;
+                else if(memex.ctl_regByte == 1) begin
+                    //regfile[memex.ctl_rmByte] = memex.data_imm | memex.data_regA;
+                    alu_result_exwb = memex.data_imm | memex.data_regA;
                 end
-                else if(idex.ctl_regByte == 0) begin
+                else if(memex.ctl_regByte == 0) begin
                     ext_addReg = {65{1'b0}};
-                    ext_addReg = idex.data_imm + idex.data_regA;
-                    //$write("data_imm = %0h, data_regA = %0h ext_addReg = %0h",idex.data_imm, idex.data_regA, ext_addReg[1:64]);
-                    alu_result_exmem = ext_addReg[1:64];
+                    ext_addReg = memex.data_imm + memex.data_regA;
+                    //$write("data_imm = %0h, data_regA = %0h ext_addReg = %0h",memex.data_imm, memex.data_regA, ext_addReg[1:64]);
+                    alu_result_exwb = ext_addReg[1:64];
                     rflags.cf = ext_addReg[64];
                 end
             end
 
-            else if (idex.ctl_opcode == 13) begin
+            else if (memex.ctl_opcode == 13) begin
                 // OR instruction with immediate operands
-                //regfile[0] = idex.data_imm | idex.data_regA;
-                alu_result_exmem = idex.data_imm | idex.data_regA;
-                rmByte_contents_exmem = 0;
+                //regfile[0] = memex.data_imm | memex.data_regA;
+                alu_result_exwb = memex.data_imm | memex.data_regA;
+                rmByte_contents_exwb = 0;
             end
 
-            else if (idex.ctl_opcode == 9 ) begin
+            else if (memex.ctl_opcode == 9 ) begin
                 // OR instruction with reg operands 
-  //              $write("alu %0h %0h",idex.data_regA, idex.data_regB);
-                alu_result_exmem = idex.data_regA | idex.data_regB;
+  //              $write("alu %0h %0h",memex.data_regA, memex.data_regB);
+                alu_result_exwb = memex.data_regA | memex.data_regB;
             end
 
-            else if (idex.ctl_opcode == 1 ) begin
+            else if (memex.ctl_opcode == 1 ) begin
                 // Add instruction 
-                alu_result_exmem = idex.data_regA + idex.data_regB;;
+                alu_result_exwb = memex.data_regA + memex.data_regB;;
             end
 
-            else if (idex.ctl_opcode == 247 ) begin
+            else if (memex.ctl_opcode == 247 ) begin
                 // IMUL instruction "RDX:RAX = RAX * REG64"
 
                 // Sign extend 64 bit register values to 128 bit
-                data_regAA = {{64{idex.data_regB[0]}}, idex.data_regB}; 
-                data_regBB = {{64{idex.data_regA[0]}}, idex.data_regA};
+                data_regAA = {{64{memex.data_regB[0]}}, memex.data_regB}; 
+                data_regBB = {{64{memex.data_regA[0]}}, memex.data_regA};
 
                 // 128 bit multiplication
                 temp16 = data_regAA * data_regBB;
-                //$write("temp16 = %0h",temp16);
                 // Store result into RDX:RAX
-                //regfile[0] = temp16[64:127];
-                //regfile[2] = temp16[0:63];
-                alu_ext_result_exmem = temp16[0:63];
-                alu_result_exmem = temp16[64:127];
+                alu_ext_result_exwb = temp16[0:63];
+                alu_result_exwb = temp16[64:127];
             end
-            else if ((idex.ctl_opcode == 193 ) || (idex.ctl_opcode == 209 ) || (idex.ctl_opcode == 211 ))  begin
+            else if ((memex.ctl_opcode == 193 ) || (memex.ctl_opcode == 209 ) || (memex.ctl_opcode == 211 ))  begin
                 // SHR & SHL instruction is with reg operands 
                 /*
                  * Opcode for SHL and SHR
@@ -1441,24 +1486,24 @@ module Core (
                  *   else if reg = 5
                  *       SHIFT Right
                  */
-                alu_result_exmem = {idex.data_regA};
-                if (idex.data_regB == 4)
+                alu_result_exwb = {memex.data_regA};
+                if (memex.data_regB == 4)
                     begin
-                        for (i = 0; i < idex.data_imm; i = i+1)
+                        for (i = 0; i < memex.data_imm; i = i+1)
                         begin
-                            alu_result_exmem = alu_result_exmem * 2;
+                            alu_result_exwb = alu_result_exwb * 2;
                         end
                     end
                 else
                     begin
-                        for (i = 0; i < idex.data_imm; i=i+1)
+                        for (i = 0; i < memex.data_imm; i=i+1)
                         begin
-                            alu_result_exmem = alu_result_exmem / 2;
+                            alu_result_exwb = alu_result_exwb / 2;
                         end
                     end
             end
-            //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",idex.pc_contents, idex.data_regA, idex.data_regB, idex.data_disp, idex.data_imm, idex.ctl_opcode, idex.ctl_regByte, idex.ctl_rmByte);
-            rip_exmem = idex.pc_contents;
+            //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
+            rip_exwb = memex.pc_contents;
             enable_writeback = 1;
         end
         else
@@ -1467,19 +1512,18 @@ module Core (
 
 
     always_comb begin
-        if (can_writeback) begin
-            if(exmem.ctl_opcode == 247) begin
-                regfile[0] = exmem.alu_result;
-                regfile[2] = exmem.alu_ext_result;
+        if (can_writeback) begin : writeback_block
+            if(exwb.ctl_opcode == 247) begin
+                regfile[0] = exwb.alu_result;
+                regfile[2] = exwb.alu_ext_result;
             end 
             else begin
-                regfile[exmem.ctl_rmByte] = exmem.alu_result;
+                regfile[exwb.ctl_rmByte] = exwb.alu_result;
             end
-            dep_exmem = 0;
-            if(exmem.sim_end == 1)
+            dep_exwb = 0;
+            if(exwb.sim_end == 1)
                 $finish;
         end
-
     end
 
     always @ (posedge bus.clk) begin
@@ -1491,8 +1535,6 @@ module Core (
                 decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
             else
                 decode_offset <= 0;
-
-            can_execute <= 0;
 
             if (can_decode) begin
 
@@ -1509,21 +1551,39 @@ module Core (
                 end
             end
 
+            can_memstage <= 0;
+            if (enable_memstage) begin
+                /*
+                * Giving to the pipeline register of Memory Stage
+                */
+                idmem.pc_contents <= rip;
+                idmem.data_regA <= regA_contents;
+                idmem.data_regB <= regB_contents;
+                idmem.data_disp <= disp_contents;
+                idmem.data_imm <= imm_contents;
+                idmem.ctl_opcode <= opcode_contents;
+                idmem.ctl_rmByte <= rmByte_contents;
+                idmem.ctl_regByte <= regByte_contents;
+                idmem.ctl_dep <= dependency;
+                idmem.sim_end <= sim_end_signal;
+                can_memstage <= 1;
+            end
+
+            can_execute <= 0;
             if (enable_execute) begin
                 /*
                 * Giving to the pipeline register of ALU
                 */
-                idex.pc_contents <= rip;
-                idex.data_regA <= regA_contents;
-                idex.data_regB <= regB_contents;
-                idex.data_disp <= disp_contents;
-                idex.data_imm <= imm_contents;
-                idex.ctl_opcode <= opcode_contents;
-                idex.ctl_rmByte <= rmByte_contents;
-                idex.ctl_regByte <= regByte_contents;
-                //$write("setting dep = %0h",dependency);
-                idex.ctl_dep <= dependency;
-                idex.sim_end <= sim_end_signal;
+                memex.pc_contents <= rip_memex;
+                memex.data_regA <= regA_contents_memex;
+                memex.data_regB <= regB_contents_memex;
+                memex.data_disp <= disp_contents_memex;
+                memex.data_imm <= imm_contents_memex;
+                memex.ctl_opcode <= opcode_contents_memex;
+                memex.ctl_rmByte <= rmByte_contents_memex;
+                memex.ctl_regByte <= regByte_contents_memex;
+                memex.ctl_dep <= dependency_memex;
+                memex.sim_end <= sim_end_signal_memex;
                 can_execute <= 1;
             end
 
@@ -1532,18 +1592,18 @@ module Core (
                 /*
                 * Giving to the write back stage of the processor
                 */
-                exmem.pc_contents <= rip_exmem;
-                exmem.alu_result <= alu_result_exmem;
-                exmem.alu_ext_result <= alu_ext_result_exmem;
-                exmem.data_regB <= regB_contents_exmem;
-                exmem.ctl_rmByte <= rmByte_contents_exmem;
-                exmem.ctl_regByte <= regByte_contents_exmem;
-                exmem.sim_end <= sim_end_signal_exmem; 
-                exmem.ctl_opcode <= opcode_exmem;
-                //$write("rmByte %0h regByte %0h depEXMEMEEMEMEMEME %0h",rmByte_contents_exmem, regByte_contents_exmem, dep_exmem);
-                score_board[rmByte_contents_exmem] <= 0;
-                if(dep_exmem == 2) begin
-                    score_board[regByte_contents_exmem] <= 0;
+                exwb.pc_contents <= rip_exwb;
+                exwb.alu_result <= alu_result_exwb;
+                exwb.alu_ext_result <= alu_ext_result_exwb;
+                exwb.data_regB <= regB_contents_exwb;
+                exwb.ctl_rmByte <= rmByte_contents_exwb;
+                exwb.ctl_regByte <= regByte_contents_exwb;
+                exwb.sim_end <= sim_end_signal_exwb; 
+                exwb.ctl_opcode <= opcode_exwb;
+                //$write("rmByte %0h regByte %0h dep EXWB %0h",rmByte_contents_exwb, regByte_contents_exwb, dep_exwb);
+                score_board[rmByte_contents_exwb] <= 0;
+                if(dep_exwb == 2) begin
+                    score_board[regByte_contents_exwb] <= 0;
                 end
                 can_writeback <= 1;
             end
