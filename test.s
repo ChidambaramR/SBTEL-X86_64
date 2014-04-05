@@ -10,7 +10,9 @@ imul %rax
 l3:
 imul %rax
 imul %rax
-jge l4
+mov $0x1231, %rcx
+cmp $0x1230, %rcx
+je l4
 jmp l4
 l2:
 jmp l3

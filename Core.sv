@@ -174,6 +174,7 @@ module Core (
         opcode_char[233] = "jmpq    "; opcode_enc[233] = "D4 "; // E9
         opcode_char[235] = "jmp     "; opcode_enc[235] = "D1 "; // EB
         opcode_char[125] = "jge     "; opcode_enc[125] = "D1 "; // EB
+        opcode_char[116] = "je      "; opcode_enc[116] = "D1 "; // EB
         opcode_char[255] = "callq   "; opcode_enc[255] = "M  "; // FF 
         
         /*
@@ -781,6 +782,7 @@ module Core (
     MEM_EX memex;
     EX_WB exwb;
     flags_reg rflags;
+    flags_reg rflags_seq;
 
     always_comb begin
         if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1)
@@ -1456,8 +1458,17 @@ module Core (
             end
 
             else if(memex.ctl_opcode == 141 || memex.ctl_opcode == 125) begin
-                // JGE instruction
+                // JGE instruction and JNL instruction
                 jump_cond_flag = 0;
+            end
+
+            else if(memex.ctl_opcode == 116) begin
+                // JE instruction
+                jump_cond_flag = 0;
+                if(rflags_seq.zf == 1) begin
+                  jump_flag = 1; // Zero flag is set for JE instruction.
+                  //$write("Conditional jump");
+                end
             end
 
             else if(memex.ctl_opcode == 137) begin // Move reg to reg
@@ -1465,21 +1476,34 @@ module Core (
             end
 
             else if(opcode_group[memex.ctl_opcode] != 0) begin
+                // Check table A-6 of INTEL manual
                 if(memex.ctl_regByte == 4) begin
+                    // AND instruction
                     //$display("data_imm = %0h data_regA = %0h result = %0h", memex.data_imm, memex.data_regA, (memex.data_imm & memex.data_regA));
                     //regfile[memex.ctl_rmByte] = memex.data_imm & memex.data_regA;
                     alu_result_exwb = memex.data_imm & memex.data_regA;
                 end
                 else if(memex.ctl_regByte == 1) begin
+                    // OR Instruction
                     //regfile[memex.ctl_rmByte] = memex.data_imm | memex.data_regA;
                     alu_result_exwb = memex.data_imm | memex.data_regA;
                 end
                 else if(memex.ctl_regByte == 0) begin
+                    // ADD instruction
                     ext_addReg = {65{1'b0}};
                     ext_addReg = memex.data_imm + memex.data_regA;
                     //$write("data_imm = %0h, data_regA = %0h ext_addReg = %0h",memex.data_imm, memex.data_regA, ext_addReg[1:64]);
                     alu_result_exwb = ext_addReg[1:64];
                     rflags.cf = ext_addReg[64];
+                end
+                else if(memex.ctl_regByte == 7) begin
+                    // CMP instruction
+                    // We need to set the RFLAGS for the jump ins to properly execute
+                    /*
+                    * Zero flag is set when the operands are equal
+                    */
+                    rflags.zf = (memex.data_regA == memex.data_imm);
+                    //$write("0 flag is set %x, %x, %x",rflags.zf, memex.data_regA, memex.data_imm);
                 end
             end
 
@@ -1542,7 +1566,7 @@ module Core (
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
             rip_exwb = memex.pc_contents;
-            if(memex.ctl_opcode != 125) begin
+            if(memex.ctl_opcode != 125 && memex.ctl_opcode != 116) begin
                 /*
                 * We dont want the write back stage for conditional jumps.
                 * We just want the ALU to execute and set the flags for resteering the fetch
@@ -1583,6 +1607,9 @@ module Core (
                 decode_offset <= 0;
                 fetch_offset <= 0;
             end
+
+            // Set all the flags right here
+            rflags_seq.zf <= rflags.zf;
 
             if(jump_cond_flag)
                 jump_cond_signal <= 1;
