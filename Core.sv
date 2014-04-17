@@ -5,9 +5,15 @@ module Core (
     
     enum { fetch_idle, fetch_waiting, fetch_active } fetch_state;
     logic[63:0] fetch_rip;
+    //logic[63:0] fetch_data_rip;
     logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
+    logic[0:64*8-1] data_buffer;
+    logic[0:8*8-1] load_buffer;
+    logic load_done;
     logic[5:0] fetch_skip;
+    logic[5:0] fetch_data_skip;
     logic[6:0] fetch_offset, decode_offset;
+    logic[0:6] data_offset;
     logic[0:63] regfile[0:16-1];
     logic score_board[0:16-1];
     
@@ -46,6 +52,7 @@ module Core (
     logic [0:7][0:7] instr_buffer;
     logic [0:32*8-1] reg_buffer;
     logic [0:63] internal_offset;
+    logic [0:63] internal_data_offset;
 
     logic can_memstage;
     logic can_execute;
@@ -53,6 +60,11 @@ module Core (
     logic enable_memstage;
     logic enable_execute;
     logic enable_writeback;
+
+    logic data_req;
+    logic memstage_active;
+    logic data_reqFlag;
+    logic [0:63] data_reqAddr;
 
     initial 
     begin
@@ -323,6 +335,8 @@ module Core (
     endfunction
     
     logic send_fetch_req;
+    logic outstanding_fetch_req;
+
     always_comb begin
         if (fetch_state != fetch_idle) begin
             send_fetch_req = 0; // hack: in theory, we could try to send another request at this point
@@ -349,8 +363,8 @@ module Core (
             internal_offset <= 0;
     
         end else begin // !bus.reset
+
     
-            bus.reqcyc <= send_fetch_req;
             /*
             * REQCYC
             * If reqcyc is up, then we are sending a request to the memory.
@@ -371,16 +385,40 @@ module Core (
             * result of the and is 8000C0. That means we have to fetch from 800000 to 8000C0.
             * how is this 64 bytes?
             */
-            bus.req <= fetch_rip & ~63;
-            bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
+            if(!bus.respcyc) begin
+            if(!data_req) begin
+                // Sending a reques for instructions
+                if(send_fetch_req)
+                    outstanding_fetch_req <= 1;
+                bus.req <= fetch_rip & ~63;
+                bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
+                bus.reqcyc <= send_fetch_req;
+            end
+            else begin
+                // Sending a request for data
+                    if(!outstanding_fetch_req) begin
+                    bus.req <= (data_reqAddr & ~63) ;
+                    fetch_data_skip <= (data_reqAddr[58:63])&(~7);
+                    internal_data_offset <= (data_reqAddr[58:63])&(7);
+                    $write("req = %x", bus.req);
+                    bus.reqtag <= { bus.READ, bus.MEMORY, {7'b0,1'b1}};
+                    bus.reqcyc <= 1;
+                    data_offset <= 0;
+                    outstanding_fetch_req <= 1;
+//                    outstanding_data_req <= 1;
+                    //$finish;
+                    end
+            end
+            end
 
     
-            if (bus.respcyc) begin
+            if (bus.respcyc && (bus.resptag[7:0] == 0)) begin
                 if(!jump_flag) begin
                     /*
                     * It takes around 48 micro seconds for a response to come back.
                     */
                     assert(!send_fetch_req) else $fatal;
+                    outstanding_fetch_req <= 0;
                     fetch_state <= fetch_active;
                     fetch_rip <= fetch_rip + 8;
                     if ((fetch_skip) > 0) begin
@@ -425,7 +463,50 @@ module Core (
                     fetch_offset <= 0;
                     jump_signal <= 1;
                 end
-            end else begin
+            end else if(bus.respcyc && (bus.resptag[7:0] == 1)) begin
+                /*
+                * We received a response for data request
+                */
+                outstanding_fetch_req <= 0;
+                data_req <= 0;
+                $write("got response for my data req. Yayy");
+                data_buffer[data_offset*8 +: 64] <= bus.resp;
+                data_offset <= data_offset + 8;
+                    if ((fetch_data_skip) > 0) begin
+                        /*
+                        * Fetch skip is up only when there is a response for the first time. 
+                        */
+                        fetch_data_skip <= fetch_data_skip - 8;
+                    end else begin
+                        if(!load_done) begin
+                        if(internal_data_offset == 0)
+                          load_buffer <= bus.resp[63:56];
+                        else if(internal_data_offset == 1)
+                          load_buffer <= bus.resp[55:48];
+                        else if(internal_data_offset == 2)
+                          load_buffer <= bus.resp[47:40];
+                        else if(internal_data_offset == 3)
+                          load_buffer <= bus.resp[39:32];
+                        else if(internal_data_offset == 4)
+                          load_buffer <= bus.resp[31:24];
+                        else if(internal_data_offset == 5)
+                          load_buffer <= bus.resp[23:16];
+                        else if(internal_data_offset == 6)
+                          load_buffer <= bus.resp[15:8];
+                        else if(internal_data_offset == 7)
+                          load_buffer <= bus.resp[7:0];
+//                        $display("orig resp %x",bus.resp);
+//                        $display("resp %x io = %x",bus.resp[55:0], internal_offset);
+                        //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
+                        internal_data_offset <= 0;
+                        load_done <= 1;
+                        end
+                    end
+                //if(data_offset >= 56)
+                  //load_done <= 1;
+                  //  $finish;
+            end
+            else begin
                 // Handling the jump signal when no response in the bus
                 if(!jump_flag)
                     jump_signal <= 0;
@@ -458,6 +539,7 @@ module Core (
                       fetch state was not idle, we would not have sent a request at all. So we are making
                       the sanity check. 
                     */
+                    bus.reqcyc <= 0;
                     fetch_state <= fetch_waiting;
                 end
             end
@@ -785,7 +867,7 @@ module Core (
     flags_reg rflags_seq;
 
     always_comb begin
-        if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1)
+        if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1)
             can_decode = 0;
 
         if (can_decode) begin : decode_block
@@ -1154,6 +1236,16 @@ module Core (
                                 else begin
                                     reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                             {reg_table_64[rmByte]}, {")"}};
+                                    $write("found you");
+                                    if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                          data_reqFlag = 1;
+                                          data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                      end
+                                      else begin
+                                          offset = 0;
+                                          can_decode = 0;
+                                          enable_memstage = 0;
+                                      end
                                 end
                             end
 
@@ -1217,8 +1309,18 @@ module Core (
                                             {"), "}, {reg_table_64[regByte]}};
                                 end
                                 else begin
+                                      //$write("found you");
                                       reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {reg_table_64[rmByte]}, {"), "},
                                             {reg_table_64[regByte]}};
+                                      if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                          data_reqFlag = 1;
+                                          data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                      end
+                                      else begin
+                                          offset = 0;
+                                          can_decode = 0;
+                                          enable_memstage = 0;
+                                      end
                                 end
                             end
 
@@ -1383,6 +1485,9 @@ module Core (
                 else if(jump_cond_flag == 1) begin
                       can_decode = 0;
                 end
+                else if(data_reqFlag == 1) begin
+                      can_decode = 0;
+                end
             end
             else begin
                 enable_memstage = 0;
@@ -1407,19 +1512,31 @@ module Core (
 
     always_comb begin
         if (can_memstage) begin : memstage_block
-
-            rip_memex              = idmem.pc_contents;
-            regA_contents_memex    = idmem.data_regA;
-            regB_contents_memex    = idmem.data_regB;
-            disp_contents_memex    = idmem.data_disp;
-            imm_contents_memex     = idmem.data_imm;
-            opcode_contents_memex  = idmem.ctl_opcode;
-            rmByte_contents_memex  = idmem.ctl_rmByte;
-            regByte_contents_memex = idmem.ctl_regByte;
-            dependency_memex       = idmem.ctl_dep;
-            sim_end_signal_memex   = idmem.sim_end;
-
-            enable_execute = 1;
+            if(!memstage_active) begin
+                rip_memex              = idmem.pc_contents;
+                regA_contents_memex    = idmem.data_regA;
+                regB_contents_memex    = idmem.data_regB;
+                disp_contents_memex    = idmem.data_disp;
+                imm_contents_memex     = idmem.data_imm;
+                opcode_contents_memex  = idmem.ctl_opcode;
+                rmByte_contents_memex  = idmem.ctl_rmByte;
+                regByte_contents_memex = idmem.ctl_regByte;
+                dependency_memex       = idmem.ctl_dep;
+                sim_end_signal_memex   = idmem.sim_end;
+                enable_execute = 1;
+            end
+            else begin
+                /*
+                * Data req flag is set. This is a store ins
+                */
+                if(load_done) begin
+                  $write("load byte = %x",load_buffer);
+                  // Got the load value. Should feed this in the pipeline
+                  $finish;
+                end
+                $display("Issuing store to mem");
+                $display("Target addre = %x",data_reqAddr);
+            end
         end
         else
             enable_execute = 0;
@@ -1631,7 +1748,8 @@ module Core (
                 end
             end
 
-            can_memstage <= 0;
+            if(!data_reqFlag)
+              can_memstage <= 0;
             if (enable_memstage) begin
                 /*
                 * Giving to the pipeline register of Memory Stage
@@ -1647,6 +1765,10 @@ module Core (
                 idmem.ctl_dep <= dependency;
                 idmem.sim_end <= sim_end_signal;
                 can_memstage <= 1;
+                if(data_reqFlag) begin
+                    data_req <= 1;
+                    memstage_active <= 1;
+                end
             end
 
             can_execute <= 0;
