@@ -9,7 +9,8 @@ module Core (
     logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
     logic[0:64*8-1] data_buffer;
     logic[0:8*8-1] load_buffer;
-    logic load_done;
+    logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
+    logic loadbuffer_done;
     logic[5:0] fetch_skip;
     logic[5:0] fetch_data_skip;
     logic[6:0] fetch_offset, decode_offset;
@@ -400,7 +401,7 @@ module Core (
                     bus.req <= (data_reqAddr & ~63) ;
                     fetch_data_skip <= (data_reqAddr[58:63])&(~7);
                     internal_data_offset <= (data_reqAddr[58:63])&(7);
-                    $write("req = %x", bus.req);
+                    //$write("req = %x", bus.req);
                     bus.reqtag <= { bus.READ, bus.MEMORY, {7'b0,1'b1}};
                     bus.reqcyc <= 1;
                     data_offset <= 0;
@@ -469,9 +470,10 @@ module Core (
                 */
                 outstanding_fetch_req <= 0;
                 data_req <= 0;
-                $write("got response for my data req. Yayy");
+                //$write("got response for my data req. Yayy");
                 data_buffer[data_offset*8 +: 64] <= bus.resp;
                 data_offset <= data_offset + 8;
+                fetch_state <= fetch_active;
                     if ((fetch_data_skip) > 0) begin
                         /*
                         * Fetch skip is up only when there is a response for the first time. 
@@ -867,6 +869,8 @@ module Core (
     flags_reg rflags_seq;
 
     always_comb begin
+        dependency = 0;
+
         if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1)
             can_decode = 0;
 
@@ -882,6 +886,8 @@ module Core (
             rex_prefix = 0;
             prefix = 0;
             jump_target = 0;
+            loadbuffer_done = 0;
+            data_reqFlag = 0;
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
             end
@@ -1240,6 +1246,7 @@ module Core (
                                     if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                           data_reqFlag = 1;
                                           data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                          dependency = 2;
                                       end
                                       else begin
                                           offset = 0;
@@ -1315,6 +1322,9 @@ module Core (
                                       if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                           data_reqFlag = 1;
                                           data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                          regByte_contents = regByte;
+                                          rmByte_contents = rmByte;
+                                          dependency = 2;
                                       end
                                       else begin
                                           offset = 0;
@@ -1530,12 +1540,22 @@ module Core (
                 * Data req flag is set. This is a store ins
                 */
                 if(load_done) begin
-                  $write("load byte = %x",load_buffer);
+                  //$write("load byte = %x",load_buffer);
+                  rmByte_contents_memex  = idmem.ctl_rmByte;
+                  regByte_contents_memex = idmem.ctl_regByte;
+                  opcode_contents_memex  = idmem.ctl_opcode;
+                  dependency_memex       = idmem.ctl_dep;
+                  loadbuffer_done = 1;
+                  enable_execute = 1;
+                  data_reqFlag = 0;
                   // Got the load value. Should feed this in the pipeline
-                  $finish;
+                  //$finish;
                 end
-                $display("Issuing store to mem");
-                $display("Target addre = %x",data_reqAddr);
+                else begin
+                  enable_execute = 0;
+                end
+                //$display("Issuing store to mem");
+                //$display("Target addre = %x",data_reqAddr);
             end
         end
         else
@@ -1563,7 +1583,7 @@ module Core (
             sim_end_signal_exwb = memex.sim_end;
             rmByte_contents_exwb = memex.ctl_rmByte;
             opcode_exwb = memex.ctl_opcode;
-
+            //$write("Opcode at execute stage = %x",memex.ctl_opcode);
             if(dep_exwb == 2) begin
                 regByte_contents_exwb = memex.ctl_regByte;
             end
@@ -1572,6 +1592,13 @@ module Core (
                 //regfile[memex.ctl_rmByte] = memex.data_imm;
                 alu_result_exwb = memex.data_imm;
                 //$write("alu %0h rmByte %0h", alu_result_exwb, rmByte_contents_exwb);
+            end
+
+            else if(memex.ctl_opcode == 139) begin
+                // Load instruction. ex: mov $0x100(%rax), %rbx
+                //$write("Asssigning the value to pipeline register");
+                alu_result_exwb = load_buffer; // The load buffer is filled in the mem stage
+
             end
 
             else if(memex.ctl_opcode == 141 || memex.ctl_opcode == 125) begin
@@ -1703,7 +1730,7 @@ module Core (
             if(exwb.ctl_opcode == 247) begin
                 regfile[0] = exwb.alu_result;
                 regfile[2] = exwb.alu_ext_result;
-            end 
+            end
             else begin
                 regfile[exwb.ctl_rmByte] = exwb.alu_result;
             end
@@ -1733,7 +1760,7 @@ module Core (
             else
                 jump_cond_signal <= 0;
 
-            if (can_decode) begin
+            //if (can_decode) begin
 
                 // Decoder is detecting a dependency
                 if(dependency == 1) begin
@@ -1746,7 +1773,7 @@ module Core (
                     score_board[rmByte_contents] <= 1;
                     score_board[regByte_contents] <= 1;
                 end
-            end
+            //end
 
             if(!data_reqFlag)
               can_memstage <= 0;
@@ -1786,6 +1813,11 @@ module Core (
                 memex.ctl_regByte <= regByte_contents_memex;
                 memex.ctl_dep <= dependency_memex;
                 memex.sim_end <= sim_end_signal_memex;
+                if(loadbuffer_done) begin
+                    load_done <= 0;
+                    memstage_active <= 0;
+                end
+                    
                 can_execute <= 1;
             end
 

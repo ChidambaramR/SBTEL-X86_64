@@ -1,6 +1,7 @@
 mov $0x1, %rbx
-mov $0x7FFFF0, %rax
-movq %rbx, 0x100(%rax)
+mov $0x7FFFF6, %rax
+#movq %rbx, 0x100(%rax)
+movq 0x100(%rax), %rbx
 imul %rax
 l1:
 imul %rax
