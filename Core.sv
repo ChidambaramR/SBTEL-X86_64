@@ -14,6 +14,8 @@ module Core (
     logic store_ack_waiting;
     logic store_done;
     logic store_opn;
+    logic store_ack_received;
+
     logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
     logic loadbuffer_done;
     logic[5:0] fetch_skip;
@@ -91,6 +93,7 @@ module Core (
             regfile[j] = {64{1'b0}};
         end
 
+        store_ack_received = 0;
         /*for (j = 0; j <= 14; j++) begin
             score_board[j] = 0;
         end*/
@@ -406,15 +409,14 @@ module Core (
                 bus.reqcyc <= send_fetch_req;
             end
             else if(store_ins && store_done) begin
-                if(!outstanding_fetch_req && !store_ack_waiting) begin
+                if(!outstanding_fetch_req) begin
                     if(cycle == 1) begin
                         bus.req <= (data_reqAddr & ~63);
                         bus.reqcyc <= 1;
                         bus.reqtag <= { bus.WRITE, bus.MEMORY, {6'b0,1'b1,1'b1}};
-                        store_ack_waiting <= 1;
                         cycle <= 0;
                     end
-                    else begin
+                    else if(store_ack_received) begin
                         // Now send the contents of the data to be stored
                 //        if(!bus.reqcyc) begin
                             /*
@@ -426,6 +428,8 @@ module Core (
                                 bus.reqcyc <= 1;
                                 store_ack_waiting <= 1;
                                 bus.req <= data_buffer[data_offset*8 +: 64];
+                                //if(data_offset == 16)
+                                  //  $finish;
                                 data_offset <= data_offset + 8;
                             end
                             else begin
@@ -619,15 +623,16 @@ module Core (
                     /*
                     * We got an ACK from the bus. So we have to wait.
                     */
-                    if(store_ack_waiting)
-                        store_ack_waiting <= 0;
+                    //if(store_ack_waiting)
+                      //  store_ack_waiting <= 0;
                     assert(fetch_state == fetch_idle) else $fatal;
                     /*
                     * At the point when we got an ACK, the fetch state should have been idle. If the
                       fetch state was not idle, we would not have sent a request at all. So we are making
                       the sanity check. 
                     */
-                    bus.reqcyc <= 0;
+                    if(!store_done)
+                      bus.reqcyc <= 0;
                     fetch_state <= fetch_waiting;
                 end
             end
@@ -953,6 +958,13 @@ module Core (
     EX_WB exwb;
     flags_reg rflags;
     flags_reg rflags_seq;
+
+    // Request ack logic
+    always_comb begin
+      if(bus.reqack && store_done)
+          store_ack_received = 1;
+    end
+
 
     always_comb begin
         dependency = 0;
