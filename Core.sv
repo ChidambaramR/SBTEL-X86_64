@@ -11,6 +11,8 @@ module Core (
     logic[0:8*8-1] load_buffer;
     logic[0:8*8-1] store_word;
     logic store_ins;
+    logic store_writeback;
+    logic store_writebackFlag;
     logic store_ack_waiting;
     logic store_done;
     logic store_opn;
@@ -399,6 +401,9 @@ module Core (
             * result of the and is 8000C0. That means we have to fetch from 800000 to 8000C0.
             * how is this 64 bytes?
             */
+            if(store_writebackFlag)
+              store_writeback <= 1;
+
             if(!bus.respcyc) begin
             if(!data_req && !store_ins) begin
                 // Sending a reques for instructions
@@ -415,6 +420,7 @@ module Core (
                         bus.reqcyc <= 1;
                         bus.reqtag <= { bus.WRITE, bus.MEMORY, {6'b0,1'b1,1'b1}};
                         cycle <= 0;
+                        store_writeback <= 0;
                     end
                     else if(store_ack_received) begin
                         // Now send the contents of the data to be stored
@@ -585,6 +591,7 @@ module Core (
                         //data_buffer[(data_offset)*8 +: 2*64] <= bus.resp;
                         $write("Changed buffer = %x",data_buffer);
                         store_done <= 1;
+                        //store_writeback <= 0;
                         cycle <= 1;
                         data_offset <= 0;
                       end
@@ -989,8 +996,10 @@ typedef struct packed {
             jump_target = 0;
             loadbuffer_done = 0;
             data_reqFlag = 0;
+            store_reqFlag = 0;
             store_word = 0;
             store_ins = 0;
+
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
             end
@@ -1348,6 +1357,8 @@ typedef struct packed {
                                     $write("found you");
                                     if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                           store_reqFlag = 1;
+                                          regByte_contents = regByte;
+                                          rmByte_contents = rmByte;
                                           data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
                                           store_word = regfile[regByte];
                                           store_ins = 1;
@@ -1630,7 +1641,7 @@ typedef struct packed {
     end
 
 
-    mod_memstage m1(can_memstage, memstage_active, load_done, 
+    mod_memstage m1(can_memstage, memstage_active, load_done, load_buffer,  
                         idmem, store_memstage_active, store_ins, 
                         store_opn, enable_execute, loadbuffer_done,
                         data_reqFlag, store_reqFlag, rip_memex,
@@ -1647,14 +1658,15 @@ typedef struct packed {
           The SF indicates the sign of the signed result
     */
 
-    mod_execute ex (can_execute, memex, load_buffer,
+    mod_execute ex (can_execute, memex, load_buffer, store_memstage_active, 
                         regfile, opcode_group, rflags_seq,
                         enable_writeback, jump_flag, jump_cond_flag,
                         rflags, rip_exwb, dep_exwb,
                         sim_end_signal_exwb, alu_result_exwb, alu_ext_result_exwb,
                         regByte_contents_exwb, rmByte_contents_exwb, opcode_exwb);
 
-    mod_writeback rb (can_writeback, exwb, regfile, dep_exwb);
+    mod_writeback rb (can_writeback, exwb, store_memstage_active, 
+                        regfile, dep_exwb, store_writebackFlag);
         
     always @ (posedge bus.clk) begin
         if (bus.reset) begin
@@ -1697,7 +1709,7 @@ typedef struct packed {
 
             if(!data_reqFlag && !store_reqFlag)
               can_memstage <= 0;
-            if(store_opn == 0)
+            if(store_opn == 0 && store_writeback)
               store_memstage_active <= 0;
             if (enable_memstage) begin
                 /*

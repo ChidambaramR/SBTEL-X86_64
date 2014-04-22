@@ -19,8 +19,10 @@ typedef struct packed {
 module mod_writeback (
         input can_writeback,
         input EX_WB exwb,
+        input store_memstage_active,
         output [0:63] regfile[0:16-1],
-        output [0:1]  dep_exwb
+        output [0:1]  dep_exwb,
+        output store_writebackFlag
 );
 
 always_comb begin
@@ -28,6 +30,11 @@ always_comb begin
         if(exwb.ctl_opcode == 247) begin
             regfile[0] = exwb.alu_result;
             regfile[2] = exwb.alu_ext_result;
+        end
+        else if(exwb.ctl_opcode == 137 && store_memstage_active) begin
+            $write("here!! wr opcode = %x", exwb.ctl_opcode);
+            regfile[exwb.ctl_regByte] = exwb.alu_result;
+            store_writebackFlag = 1;
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;

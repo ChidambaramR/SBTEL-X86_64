@@ -44,6 +44,7 @@ module mod_execute (
         input can_execute,
         input MEM_EX memex,
         input [0:8*8-1] load_buffer,
+        logic store_memstage_active,
         input [0:63] regfile[0:16-1],
         input [0:255][0:0][0:3] opcode_group,
         input flags_reg rflags_seq,
@@ -106,7 +107,7 @@ always_comb begin
                 end
             end
 
-            else if(memex.ctl_opcode == 137) begin // Move reg to reg
+            else if(memex.ctl_opcode == 137 && !store_memstage_active) begin // Move reg to reg
                 alu_result_exwb = regfile[memex.ctl_regByte];
             end
 
@@ -201,7 +202,7 @@ always_comb begin
             end
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
             rip_exwb = memex.pc_contents;
-            if(memex.ctl_opcode != 125 && memex.ctl_opcode != 116) begin
+            if(memex.ctl_opcode != 125 && memex.ctl_opcode != 116 ) begin
                 /*
                 * We dont want the write back stage for conditional jumps.
                 * We just want the ALU to execute and set the flags for resteering the fetch

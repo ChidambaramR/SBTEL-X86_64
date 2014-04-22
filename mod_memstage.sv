@@ -20,6 +20,7 @@ module mod_memstage(
     input can_memstage, 
     input memstage_active,
     input load_done,
+    input[0:8*8-1] load_buffer,
     input ID_MEM idmem,
     input store_memstage_active,
     input store_ins,
@@ -65,7 +66,7 @@ module mod_memstage(
                 */
                 if(!store_ins) begin
                     if(load_done) begin
-                      //$write("load byte = %x",load_buffer);
+                      $write("load byte = %x",load_buffer);
                       rmByte_contents_memex  = idmem.ctl_rmByte;
                       regByte_contents_memex = idmem.ctl_regByte;
                       opcode_contents_memex  = idmem.ctl_opcode;
