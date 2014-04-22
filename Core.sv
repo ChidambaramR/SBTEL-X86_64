@@ -9,14 +9,24 @@ module Core (
     logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
     logic[0:64*8-1] data_buffer;
     logic[0:8*8-1] load_buffer;
+    logic[0:8*8-1] store_word;
+    logic store_ins;
+    logic store_ack_waiting;
+    logic store_done;
+    logic store_opn;
+    logic store_ack_received;
+
     logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
     logic loadbuffer_done;
     logic[5:0] fetch_skip;
+    logic[5:0] fetch_store_skip;
     logic[5:0] fetch_data_skip;
     logic[6:0] fetch_offset, decode_offset;
     logic[0:6] data_offset;
     logic[0:63] regfile[0:16-1];
     logic score_board[0:16-1];
+    logic once;
+    logic cycle;
     
 
     /*
@@ -64,7 +74,9 @@ module Core (
 
     logic data_req;
     logic memstage_active;
+    logic store_memstage_active;
     logic data_reqFlag;
+    logic store_reqFlag;
     logic [0:63] data_reqAddr;
 
     initial 
@@ -81,6 +93,7 @@ module Core (
             regfile[j] = {64{1'b0}};
         end
 
+        store_ack_received = 0;
         /*for (j = 0; j <= 14; j++) begin
             score_board[j] = 0;
         end*/
@@ -387,7 +400,7 @@ module Core (
             * how is this 64 bytes?
             */
             if(!bus.respcyc) begin
-            if(!data_req) begin
+            if(!data_req && !store_ins) begin
                 // Sending a reques for instructions
                 if(send_fetch_req)
                     outstanding_fetch_req <= 1;
@@ -395,20 +408,59 @@ module Core (
                 bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
                 bus.reqcyc <= send_fetch_req;
             end
+            else if(store_ins && store_done) begin
+                if(!outstanding_fetch_req) begin
+                    if(cycle == 1) begin
+                        bus.req <= (data_reqAddr & ~63);
+                        bus.reqcyc <= 1;
+                        bus.reqtag <= { bus.WRITE, bus.MEMORY, {6'b0,1'b1,1'b1}};
+                        cycle <= 0;
+                    end
+                    else if(store_ack_received) begin
+                        // Now send the contents of the data to be stored
+                //        if(!bus.reqcyc) begin
+                            /*
+                            * We have to wait till reqack is received. Whenever a reqack is received
+                            * we can start sending the data. This means that the memory has accepted our 
+                            * requested.
+                            */
+                            if(!(data_offset >= 64)) begin
+                                bus.reqcyc <= 1;
+                                store_ack_waiting <= 1;
+                                bus.req <= data_buffer[data_offset*8 +: 64];
+                                //if(data_offset == 16)
+                                  //  $finish;
+                                data_offset <= data_offset + 8;
+                            end
+                            else begin
+                                // We have completed sending the data
+                                store_opn <= 0;
+                                store_done <= 0;
+                                $write("wrote to memory");
+                                //$finish;
+                            end
+                  //      end
+                    end
+
+                end
+            end
             else begin
                 // Sending a request for data
-                    if(!outstanding_fetch_req) begin
+                if(!outstanding_fetch_req && (data_req)) begin
                     bus.req <= (data_reqAddr & ~63) ;
                     fetch_data_skip <= (data_reqAddr[58:63])&(~7);
+                    fetch_store_skip <= (data_reqAddr[58:63])&(~7);
                     internal_data_offset <= (data_reqAddr[58:63])&(7);
                     //$write("req = %x", bus.req);
                     bus.reqtag <= { bus.READ, bus.MEMORY, {7'b0,1'b1}};
                     bus.reqcyc <= 1;
                     data_offset <= 0;
+                    data_buffer <= 0;
+                    once <= 1;
                     outstanding_fetch_req <= 1;
 //                    outstanding_data_req <= 1;
                     //$finish;
-                    end
+                end
             end
             end
 
@@ -471,9 +523,9 @@ module Core (
                 outstanding_fetch_req <= 0;
                 data_req <= 0;
                 //$write("got response for my data req. Yayy");
-                data_buffer[data_offset*8 +: 64] <= bus.resp;
-                data_offset <= data_offset + 8;
                 fetch_state <= fetch_active;
+                if(!store_ins) begin
+                    // We are here for a LOAD instruction
                     if ((fetch_data_skip) > 0) begin
                         /*
                         * Fetch skip is up only when there is a response for the first time. 
@@ -504,6 +556,42 @@ module Core (
                         load_done <= 1;
                         end
                     end
+                end
+                else begin
+                      // This is the flag which controls whether STORE operation has completed or not. If 0, not complete
+                      // We are begining the STORE operation.
+                      // We are here for a STORE instruction
+                      if(((fetch_store_skip) > 0)) begin
+                          /*
+                          * If fetch store skip has some value, then we dont have to mangle these contents.
+                          */
+                          data_buffer[data_offset*8 +: 64] <= bus.resp;
+                          fetch_store_skip <= fetch_store_skip - 8;
+                      end
+                      else if(once) begin
+                          data_buffer[data_offset*8 +: 64] <= store_word;
+                          once <= 0;
+                      end
+                      else
+                          data_buffer[data_offset*8 +: 64] <= bus.resp;
+                      
+                      data_offset <= data_offset + 8;
+                      $display("Bus.resp = %x data_offset = %x",bus.resp, data_offset);
+                      if(data_offset >= 56) begin
+                          /*
+                          * We have finished getting the contents in the data buffer. Now put the change buffer
+                          * in the corresponding place.
+                          */
+                        //data_buffer[(data_offset)*8 +: 2*64] <= bus.resp;
+                        $write("Changed buffer = %x",data_buffer);
+                        store_done <= 1;
+                        cycle <= 1;
+                        data_offset <= 0;
+                      end
+                          
+
+
+                end
                 //if(data_offset >= 56)
                   //load_done <= 1;
                   //  $finish;
@@ -535,13 +623,16 @@ module Core (
                     /*
                     * We got an ACK from the bus. So we have to wait.
                     */
+                    //if(store_ack_waiting)
+                      //  store_ack_waiting <= 0;
                     assert(fetch_state == fetch_idle) else $fatal;
                     /*
                     * At the point when we got an ACK, the fetch state should have been idle. If the
                       fetch state was not idle, we would not have sent a request at all. So we are making
                       the sanity check. 
                     */
-                    bus.reqcyc <= 0;
+                    if(!store_done)
+                      bus.reqcyc <= 0;
                     fetch_state <= fetch_waiting;
                 end
             end
@@ -871,10 +962,17 @@ typedef struct packed {
     flags_reg rflags;
     flags_reg rflags_seq;
 
+    // Request ack logic
+    always_comb begin
+      if(bus.reqack && store_done)
+          store_ack_received = 1;
+    end
+
+
     always_comb begin
         dependency = 0;
 
-        if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1)
+        if(can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 )
             can_decode = 0;
 
         if (can_decode) begin : decode_block
@@ -891,6 +989,8 @@ typedef struct packed {
             jump_target = 0;
             loadbuffer_done = 0;
             data_reqFlag = 0;
+            store_word = 0;
+            store_ins = 0;
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
             end
@@ -1247,8 +1347,10 @@ typedef struct packed {
                                             {reg_table_64[rmByte]}, {")"}};
                                     $write("found you");
                                     if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
-                                          data_reqFlag = 1;
+                                          store_reqFlag = 1;
                                           data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                          store_word = regfile[regByte];
+                                          store_ins = 1;
                                           dependency = 2;
                                       end
                                       else begin
@@ -1501,6 +1603,10 @@ typedef struct packed {
                 else if(data_reqFlag == 1) begin
                       can_decode = 0;
                 end
+                else if(store_reqFlag == 1) begin
+                      can_decode = 0;
+                end
+
             end
             else begin
                 enable_memstage = 0;
@@ -1524,19 +1630,18 @@ typedef struct packed {
     end
 
 
-    mod_memstage m1(can_memstage, memstage_active, 
-                    load_done, idmem, enable_execute, 
-                    loadbuffer_done, data_reqFlag, rip_memex, 
-                    regA_contents_memex, regB_contents_memex, 
-                    disp_contents_memex, imm_contents_memex, 
-                    opcode_contents_memex, rmByte_contents_memex, 
-                    regByte_contents_memex, dependency_memex, 
-                    sim_end_signal_memex);
+    mod_memstage m1(can_memstage, memstage_active, load_done, 
+    idmem, store_memstage_active, store_ins, 
+    store_opn, enable_execute, loadbuffer_done,
+    data_reqFlag, store_reqFlag, rip_memex,
+    regA_contents_memex, regB_contents_memex, disp_contents_memex,
+    imm_contents_memex, opcode_contents_memex, rmByte_contents_memex,   
+    regByte_contents_memex, dependency_memex, sim_end_signal_memex);    
 
 /*
     always_comb begin
         if (can_memstage) begin : memstage_block
-            if(!memstage_active) begin
+        if(!memstage_active && !store_memstage_active) begin
                 rip_memex              = idmem.pc_contents;
                 regA_contents_memex    = idmem.data_regA;
                 regB_contents_memex    = idmem.data_regB;
@@ -1551,23 +1656,40 @@ typedef struct packed {
             end
             else begin */
                 /*
-                * Data req flag is set. This is a store ins
+                * Data req flag is set. This is a load ins
+                * For store instruction we dont have to worry about further pipeline stages
                 */
-/*                if(load_done) begin
-                  //$write("load byte = %x",load_buffer);
-                  rmByte_contents_memex  = idmem.ctl_rmByte;
-                  regByte_contents_memex = idmem.ctl_regByte;
-                  opcode_contents_memex  = idmem.ctl_opcode;
-                  dependency_memex       = idmem.ctl_dep;
-                  loadbuffer_done = 1;
-                  enable_execute = 1;
-                  data_reqFlag = 0;
-                  // Got the load value. Should feed this in the pipeline
-                  //$finish;
+/*              if(!store_ins) begin
+                    if(load_done) begin
+                      $write("load byte = %x",load_buffer);
+                      rmByte_contents_memex  = idmem.ctl_rmByte;
+                      regByte_contents_memex = idmem.ctl_regByte;
+                      opcode_contents_memex  = idmem.ctl_opcode;
+                      dependency_memex       = idmem.ctl_dep;
+                      loadbuffer_done = 1;
+                      enable_execute = 1;
+                      data_reqFlag = 0;
+                      // Got the load value. Should feed this in the pipeline
+                      //$finish;
+                    end
+                    else begin
+                        enable_execute = 0;
+                    end
                 end
                 else begin
-                  enable_execute = 0;
+                  // This is a STORE instruction
+                    if(store_opn == 0) begin
+                        rmByte_contents_memex  = idmem.ctl_rmByte;
+                        regByte_contents_memex = idmem.ctl_regByte;
+                        opcode_contents_memex  = idmem.ctl_opcode;
+                        dependency_memex       = idmem.ctl_dep;
+                        store_reqFlag = 0;
+                        enable_execute = 1;
+                    end
+                    else
+                      enable_execute = 0;
                 end
+
                 //$display("Issuing store to mem");
                 //$display("Target addre = %x",data_reqAddr);
             end
@@ -1575,9 +1697,9 @@ typedef struct packed {
         else
             enable_execute = 0;
     end
-
   */
-    /*
+  
+   /*
     * This is the ALU block. Any comments about ALU add here.
     * Info about RFLAGS for each instruction
     * ADD:
@@ -1779,6 +1901,10 @@ typedef struct packed {
                 fetch_offset <= 0;
             end
 
+            /*if(store_complete) begin
+                store_done <= 0;
+            end*/
+
             // Set all the flags right here
             rflags_seq.zf <= rflags.zf;
 
@@ -1802,8 +1928,10 @@ typedef struct packed {
                 end
             //end
 
-            if(!data_reqFlag)
+            if(!data_reqFlag && !store_reqFlag)
               can_memstage <= 0;
+            if(store_opn == 0)
+              store_memstage_active <= 0;
             if (enable_memstage) begin
                 /*
                 * Giving to the pipeline register of Memory Stage
@@ -1823,6 +1951,11 @@ typedef struct packed {
                 if(data_reqFlag) begin
                     data_req <= 1;
                     memstage_active <= 1;
+                end
+                if(store_reqFlag) begin
+                    store_opn <= 1;
+                    data_req <= 1;
+                    store_memstage_active <= 1;
                 end
             end
 
@@ -1845,7 +1978,6 @@ typedef struct packed {
                     load_done <= 0;
                     memstage_active <= 0;
                 end
-                    
                 can_execute <= 1;
             end
 

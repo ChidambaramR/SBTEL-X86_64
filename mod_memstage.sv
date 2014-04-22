@@ -21,9 +21,13 @@ module mod_memstage(
     input memstage_active,
     input load_done,
     input ID_MEM idmem,
+    input store_memstage_active,
+    input store_ins,
+    input store_opn,
     output enable_execute,
     output loadbuffer_done,
     output data_reqFlag,
+    output store_reqFlag,
     
     // Temporary values which will be stored in the MEMEX pipeline register
     output [0:63] rip_memex,
@@ -38,9 +42,10 @@ module mod_memstage(
     output sim_end_signal_memex                // Variable to keep track of simulation ending
     );    
 
-always_comb begin
+
+    always_comb begin
         if (can_memstage) begin : memstage_block
-            if(!memstage_active) begin
+        if(!memstage_active && !store_memstage_active) begin
                 rip_memex              = idmem.pc_contents;
                 regA_contents_memex    = idmem.data_regA;
                 regB_contents_memex    = idmem.data_regB;
@@ -52,30 +57,43 @@ always_comb begin
                 dependency_memex       = idmem.ctl_dep;
                 sim_end_signal_memex   = idmem.sim_end;
                 enable_execute = 1;
-                //$display("Issuing store to mem 1");
-
             end
             else begin
                 /*
-                * Data req flag is set. This is a store ins
+                * Data req flag is set. This is a load ins
+                * For store instruction we dont have to worry about further pipeline stages
                 */
-                if(load_done) begin
-                  //$write("load byte = %x",load_buffer);
-                  rmByte_contents_memex  = idmem.ctl_rmByte;
-                  regByte_contents_memex = idmem.ctl_regByte;
-                  opcode_contents_memex  = idmem.ctl_opcode;
-                  dependency_memex       = idmem.ctl_dep;
-                  loadbuffer_done = 1;
-                  enable_execute = 1;
-                  data_reqFlag = 0;
-                  //$display("Issuing store to mem 2");
-                  // Got the load value. Should feed this in the pipeline
-                  //$finish;
+                if(!store_ins) begin
+                    if(load_done) begin
+                      //$write("load byte = %x",load_buffer);
+                      rmByte_contents_memex  = idmem.ctl_rmByte;
+                      regByte_contents_memex = idmem.ctl_regByte;
+                      opcode_contents_memex  = idmem.ctl_opcode;
+                      dependency_memex       = idmem.ctl_dep;
+                      loadbuffer_done = 1;
+                      enable_execute = 1;
+                      data_reqFlag = 0;
+                      // Got the load value. Should feed this in the pipeline
+                      //$finish;
+                    end
+                    else begin
+                        enable_execute = 0;
+                    end
                 end
                 else begin
-                  enable_execute = 0;
-                  //$display("Issuing store to mem 3");
+                  // This is a STORE instruction
+                    if(store_opn == 0) begin
+                        rmByte_contents_memex  = idmem.ctl_rmByte;
+                        regByte_contents_memex = idmem.ctl_regByte;
+                        opcode_contents_memex  = idmem.ctl_opcode;
+                        dependency_memex       = idmem.ctl_dep;
+                        store_reqFlag = 0;
+                        enable_execute = 1;
+                    end
+                    else
+                      enable_execute = 0;
                 end
+
                 //$display("Issuing store to mem");
                 //$display("Target addre = %x",data_reqAddr);
             end
@@ -83,6 +101,5 @@ always_comb begin
         else
             enable_execute = 0;
     end
-
 endmodule
 
