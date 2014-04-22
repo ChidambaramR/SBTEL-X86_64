@@ -1,3 +1,11 @@
+/*
+ * This is the ALU block. Any comments about ALU add here.
+ * Info about RFLAGS for each instruction
+ * ADD:
+ *     It sets the OF and the CF flags to indiciate a carry(overflow) in the signed or unsigned result. 
+       The SF indicates the sign of the signed result
+ */
+
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
 typedef struct packed {
     // PC + 1
