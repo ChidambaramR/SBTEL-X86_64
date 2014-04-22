@@ -1631,12 +1631,12 @@ typedef struct packed {
 
 
     mod_memstage m1(can_memstage, memstage_active, load_done, 
-    idmem, store_memstage_active, store_ins, 
-    store_opn, enable_execute, loadbuffer_done,
-    data_reqFlag, store_reqFlag, rip_memex,
-    regA_contents_memex, regB_contents_memex, disp_contents_memex,
-    imm_contents_memex, opcode_contents_memex, rmByte_contents_memex,   
-    regByte_contents_memex, dependency_memex, sim_end_signal_memex);    
+                        idmem, store_memstage_active, store_ins, 
+                        store_opn, enable_execute, loadbuffer_done,
+                        data_reqFlag, store_reqFlag, rip_memex,
+                        regA_contents_memex, regB_contents_memex, disp_contents_memex,
+                        imm_contents_memex, opcode_contents_memex, rmByte_contents_memex,   
+                        regByte_contents_memex, dependency_memex, sim_end_signal_memex);    
 
 /*
     always_comb begin
@@ -1706,7 +1706,7 @@ typedef struct packed {
     *     It sets the OF and the CF flags to indiciate a carry(overflow) in the signed or unsigned result. 
           The SF indicates the sign of the signed result
     */
-
+/*
     logic[0 : 127] data_regAA;
     logic[0 : 127] data_regBB;
     logic[0 : 64] ext_addReg;
@@ -1779,10 +1779,10 @@ typedef struct packed {
                 else if(memex.ctl_regByte == 7) begin
                     // CMP instruction
                     // We need to set the RFLAGS for the jump ins to properly execute
-                    /*
+*/                    /*
                     * Zero flag is set when the operands are equal
                     */
-                    rflags.zf = (memex.data_regA == memex.data_imm);
+/*                    rflags.zf = (memex.data_regA == memex.data_imm);
                     //$write("0 flag is set %x, %x, %x",rflags.zf, memex.data_regA, memex.data_imm);
                 end
             end
@@ -1820,7 +1820,7 @@ typedef struct packed {
             end
             else if ((memex.ctl_opcode == 193 ) || (memex.ctl_opcode == 209 ) || (memex.ctl_opcode == 211 ))  begin
                 // SHR & SHL instruction is with reg operands 
-                /*
+*/                /*
                  * Opcode for SHL and SHR
                  * In Mod R/M Byte,
                  * If reg = 4, then 
@@ -1828,7 +1828,7 @@ typedef struct packed {
                  *   else if reg = 5
                  *       SHIFT Right
                  */
-                alu_result_exwb = {memex.data_regA};
+/*                alu_result_exwb = {memex.data_regA};
                 if (memex.data_regB == 4)
                     begin
                         for (i = 0; i < memex.data_imm; i = i+1)
@@ -1847,11 +1847,11 @@ typedef struct packed {
             //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
             rip_exwb = memex.pc_contents;
             if(memex.ctl_opcode != 125 && memex.ctl_opcode != 116) begin
-                /*
+*/                /*
                 * We dont want the write back stage for conditional jumps.
                 * We just want the ALU to execute and set the flags for resteering the fetch
                 */
-                enable_writeback = 1;
+/*                enable_writeback = 1;
             end
             else
                 enable_writeback = 0;
@@ -1859,15 +1859,14 @@ typedef struct packed {
         else
             enable_writeback = 0;
     end
-
-/*
-    mod_execute ex (can_execute, memex, load_buffer, 
-        regfile, opcode_group, enable_writeback,
-        jump_flag, jump_cond_flag, rflags, 
-        rip_exwb, dep_exwb, sim_end_signal_exwb,
-        alu_result_exwb, alu_ext_result_exwb, regByte_contents_exwb, 
-        rmByte_contents_exwb, opcode_exwb);
 */
+
+    mod_execute ex (can_execute, memex, load_buffer,
+                        regfile, opcode_group, rflags_seq,
+                        enable_writeback, jump_flag, jump_cond_flag,
+                        rflags, rip_exwb, dep_exwb,
+                        sim_end_signal_exwb, alu_result_exwb, alu_ext_result_exwb,
+                        regByte_contents_exwb, rmByte_contents_exwb, opcode_exwb);
 
     mod_writeback rb (can_writeback, exwb, regfile, dep_exwb);
     
