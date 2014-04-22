@@ -734,60 +734,63 @@ module Core (
         logic sim_end;
     } ID_MEM;
 
-    // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
-    typedef struct packed {
-        // PC + 1
-        logic [0:63] pc_contents;
-        // REGA Contents
-        logic [0:63] data_regA;
-        // REGB Contents
-        logic [0:63] data_regB;
-        // Control signals
-        logic [0:63] data_disp;
-        logic [0:63] data_imm;
-        logic [0:7]  ctl_opcode;
-        logic [0:3]  ctl_regByte;
-        logic [0:3]  ctl_rmByte;
-        logic [0:1]  ctl_dep;
-        logic sim_end;
-    } MEM_EX;
+// Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+typedef struct packed {
+    // PC + 1
+    logic [0:63] pc_contents;
+    // REGA Contents
+    logic [0:63] data_regA;
+    // REGB Contents
+    logic [0:63] data_regB;
+    // Control signals
+    logic [0:63] data_disp;
+    logic [0:63] data_imm;
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic [0:1]  ctl_dep;
+    logic sim_end;
+} MEM_EX;
 
-    // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
-    typedef struct packed {
-        // PC + 1
-        logic [0:63] pc_contents;
-        // ALU Result
-        logic [0:63] alu_result;
-        logic [0:63] alu_ext_result;
-        // REGB Contents
-        logic [0:63] data_regB;
-        // Control signals
-        logic [0:63] data_disp;
-        logic [0:63] data_imm;
-        logic [0:7]  ctl_opcode;
-        logic [0:3]  ctl_regByte;
-        logic [0:3]  ctl_rmByte;
-        logic sim_end;
-    } EX_WB;
+// Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+typedef struct packed {
+    // PC + 1
+    logic [0:63] pc_contents;
+    // ALU Result
+    logic [0:63] alu_result;
+    logic [0:63] alu_ext_result;
+    // REGB Contents
+    logic [0:63] data_regB;
+    // Control signals
+    logic [0:63] data_disp;
+    logic [0:63] data_imm;
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic sim_end;
+} EX_WB;
 
-    /*
-    * Refer to wiki page of RFLAGS for the bit pattern
-    */ 
-    typedef struct packed {
-        logic [12:63] unused;
-        logic of; // Overflow flag
-        logic df; // Direction flag
-        logic If; // Interrupt flag. Not the capital case for I
-        logic tf; // trap flag
-        logic sf; // sign flag
-        logic zf; // zero flag
-        logic res_3; // reserved bit. Should be set to 0
-        logic af; // adjust flag
-        logic res_2; // reserved bit. should be set to 0
-        logic pf; // Parity flag
-        logic res_1; // reserved bit. should be set to 1
-        logic cf; // Carry flag
-    } flags_reg;
+/*
+* Refer to wiki page of RFLAGS for the bit pattern
+*/ 
+typedef struct packed {
+    logic [12:63] unused;
+    logic of; // Overflow flag
+    logic df; // Direction flag
+    logic If; // Interrupt flag. Not the capital case for I
+    logic tf; // trap flag
+    logic sf; // sign flag
+    logic zf; // zero flag
+    logic res_3; // reserved bit. Should be set to 0
+    logic af; // adjust flag
+    logic res_2; // reserved bit. should be set to 0
+    logic pf; // Parity flag
+    logic res_1; // reserved bit. should be set to 1
+    logic cf; // Carry flag
+} flags_reg;
+
+
+
   
 
     // Temporary values which will be stored in the IDMEM pipeline register
@@ -1520,6 +1523,17 @@ module Core (
         end
     end
 
+
+    mod_memstage m1(can_memstage, memstage_active, 
+                    load_done, idmem, enable_execute, 
+                    loadbuffer_done, data_reqFlag, rip_memex, 
+                    regA_contents_memex, regB_contents_memex, 
+                    disp_contents_memex, imm_contents_memex, 
+                    opcode_contents_memex, rmByte_contents_memex, 
+                    regByte_contents_memex, dependency_memex, 
+                    sim_end_signal_memex);
+
+/*
     always_comb begin
         if (can_memstage) begin : memstage_block
             if(!memstage_active) begin
@@ -1535,11 +1549,11 @@ module Core (
                 sim_end_signal_memex   = idmem.sim_end;
                 enable_execute = 1;
             end
-            else begin
+            else begin */
                 /*
                 * Data req flag is set. This is a store ins
                 */
-                if(load_done) begin
+/*                if(load_done) begin
                   //$write("load byte = %x",load_buffer);
                   rmByte_contents_memex  = idmem.ctl_rmByte;
                   regByte_contents_memex = idmem.ctl_regByte;
@@ -1562,7 +1576,7 @@ module Core (
             enable_execute = 0;
     end
 
-  
+  */
     /*
     * This is the ALU block. Any comments about ALU add here.
     * Info about RFLAGS for each instruction
@@ -1724,7 +1738,19 @@ module Core (
             enable_writeback = 0;
     end
 
+/*
+    mod_execute ex (can_execute, memex, load_buffer, 
+        regfile, opcode_group, enable_writeback,
+        jump_flag, jump_cond_flag, rflags, 
+        rip_exwb, dep_exwb, sim_end_signal_exwb,
+        alu_result_exwb, alu_ext_result_exwb, regByte_contents_exwb, 
+        rmByte_contents_exwb, opcode_exwb);
+*/
 
+    mod_writeback rb (can_writeback, exwb, regfile, dep_exwb);
+    
+    
+/*
     always_comb begin
         if (can_writeback) begin : writeback_block
             if(exwb.ctl_opcode == 247) begin
@@ -1739,6 +1765,7 @@ module Core (
                 $finish;
         end
     end
+*/
 
     always @ (posedge bus.clk) begin
         if (bus.reset) begin
@@ -1781,6 +1808,7 @@ module Core (
                 /*
                 * Giving to the pipeline register of Memory Stage
                 */
+
                 idmem.pc_contents <= rip;
                 idmem.data_regA <= regA_contents;
                 idmem.data_regB <= regB_contents;
@@ -1866,3 +1894,5 @@ module Core (
             $display("RIP = 0x%0h", rip);
     end
 endmodule
+
+
