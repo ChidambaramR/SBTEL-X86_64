@@ -31,10 +31,15 @@ always_comb begin
             regfile[0] = exwb.alu_result;
             regfile[2] = exwb.alu_ext_result;
         end
+
         else if(exwb.ctl_opcode == 137 && store_memstage_active) begin
-            $write("here!! wr opcode = %x", exwb.ctl_opcode);
-            regfile[exwb.ctl_regByte] = exwb.alu_result;
+            //$write("here!! wr opcode = %x", exwb.ctl_opcode);
+            // STORE INS
             store_writebackFlag = 1;
+        end
+        else if(exwb.ctl_opcode == 139) begin
+            // LOAD INS
+            regfile[exwb.ctl_regByte] = exwb.alu_result;
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;

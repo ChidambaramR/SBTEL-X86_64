@@ -412,6 +412,7 @@ module Core (
                 bus.req <= fetch_rip & ~63;
                 bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
                 bus.reqcyc <= send_fetch_req;
+                store_writeback <= 0;
             end
             else if(store_ins && store_done) begin
                 if(!outstanding_fetch_req) begin
@@ -463,6 +464,7 @@ module Core (
                     data_offset <= 0;
                     data_buffer <= 0;
                     once <= 1;
+                    store_writeback <= 0;
                     outstanding_fetch_req <= 1;
 //                    outstanding_data_req <= 1;
                     //$finish;
@@ -999,6 +1001,8 @@ typedef struct packed {
             store_reqFlag = 0;
             store_word = 0;
             store_ins = 0;
+            store_writebackFlag = 0;
+
 
             for (i = 0; i < 32 ; i++) begin
                 reg_buffer[i*8 +: 8] = " "; 
@@ -1707,7 +1711,7 @@ typedef struct packed {
                 end
             //end
 
-            if(!data_reqFlag && !store_reqFlag)
+            if(!data_reqFlag && !store_reqFlag )
               can_memstage <= 0;
             if(store_opn == 0 && store_writeback)
               store_memstage_active <= 0;
