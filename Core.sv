@@ -589,10 +589,9 @@ module Core (
             jump_cond_flag,
             data_reqAddr,
             bytes_decoded_this_cycle,
+            store_writebackFlag,
             can_decode_out
         );
->>>>>>> f227b03f0757856efc7ca7c203f8a7638fc83c2b
-
 
     mod_memstage m1(can_memstage, memstage_active, load_done, load_buffer,  
                         idmem, store_memstage_active, store_ins, 

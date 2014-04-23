@@ -36,6 +36,7 @@ module mod_decode(
     output jump_cond_flag,
     output [0:63] data_reqAddr,
     output [0 : 3] bytes_decoded_this_cycle,
+    output store_writebackFlag,
     output can_decode
 );
     
