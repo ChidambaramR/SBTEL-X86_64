@@ -42,7 +42,6 @@ module Core (
     logic [0:63] internal_offset;
     logic [0:63] internal_data_offset;
     
-    logic can_decode_out;
     logic can_memstage;
     logic can_execute;
     logic can_writeback;
@@ -117,11 +116,12 @@ module Core (
         end else if (bus.reqack) begin
             send_fetch_req = 0; // hack: still idle, but already got ack (in theory, we could try to send another request as early as this)
         end else begin
-            send_fetch_req = (fetch_offset - decode_offset < 7'd32);
-            if(jump_signal && !bus.respcyc) begin
+            if(!jump_signal)
+                send_fetch_req = (fetch_offset - decode_offset < 7'd32);
+            /*if(jump_signal && !bus.respcyc) begin
                 jump_flag = 0;
                 send_fetch_req = 1;
-            end
+            end*/
         end
     end
     
@@ -163,14 +163,26 @@ module Core (
               store_writeback <= 1;
 
             if(!bus.respcyc) begin
+
+            if(jump_signal && !outstanding_fetch_req) begin
+                    // Fetch request for jump instruction
+                    outstanding_fetch_req <= 1;
+                    bus.req <= fetch_rip & ~63;
+                    bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
+                    bus.reqcyc <= 1;
+                    store_writeback <= 0;
+            end
+
             if(!data_req && !store_ins) begin
                 // Sending a reques for instructions
-                if(send_fetch_req)
+                if(send_fetch_req) begin
                     outstanding_fetch_req <= 1;
-                bus.req <= fetch_rip & ~63;
-                bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
-                bus.reqcyc <= send_fetch_req;
-                store_writeback <= 0;
+                    bus.req <= fetch_rip & ~63;
+                    //bus.req <= (fetch_rip - {57'b0, (fetch_offset - decode_offset)}) & ~63;
+                    bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
+                    bus.reqcyc <= send_fetch_req;
+                    store_writeback <= 0;
+                end
             end
             else if(store_ins && store_done) begin
                 if(!outstanding_fetch_req) begin
@@ -232,10 +244,17 @@ module Core (
 
     
             if (bus.respcyc && (bus.resptag[7:0] == 0)) begin
-                if(!jump_flag) begin
+                //outstanding_fetch_req <= 0;
+                //if(!jump_flag) begin
                     /*
                     * It takes around 48 micro seconds for a response to come back.
                     */
+                    if(jump_signal) begin
+                          fetch_offset <= 0;
+                          decode_offset <= 0;
+                          jump_signal <= 0;
+                          jump_flag = 0;
+                    end
                     assert(!send_fetch_req) else $fatal;
                     outstanding_fetch_req <= 0;
                     fetch_state <= fetch_active;
@@ -268,20 +287,20 @@ module Core (
                         fetch_offset <= fetch_offset - internal_offset + 8;
                         internal_offset <= 0;
                     end
-                end
-                else begin
+                //end
+//                else begin
                     /*
                     * A jump is found and we need to resteer the fetch
                     */
-                    fetch_rip <= (jump_target & ~63);
-                    decode_buffer <= 0;
+                   // fetch_rip <= (jump_target & ~63);
+                   // decode_buffer <= 0;
                     /* verilator lint_off WIDTH */
-                    fetch_skip <= (jump_target[58:63])&(~7);
+                  /*  fetch_skip <= (jump_target[58:63])&(~7);
                     internal_offset <= (jump_target[58:63])&(7);
                     //$write("io = %0h fs = %0h",internal_offset,fetch_skip);
                     fetch_offset <= 0;
-                    jump_signal <= 1;
-                end
+                    jump_signal <= 1; */
+//                end
             end else if(bus.respcyc && (bus.resptag[7:0] == 1)) begin
                 /*
                 * We received a response for data request
@@ -365,21 +384,23 @@ module Core (
             end
             else begin
                 // Handling the jump signal when no response in the bus
-                if(!jump_flag)
-                    jump_signal <= 0;
-                else begin
+                //if(!jump_flag)
+                  //  jump_signal <= 0;
+              if(jump_flag) begin
                     /*
                     * A jump is found and we need to resteer the fetch
                     */
+                    if(!outstanding_fetch_req) begin
                     fetch_rip <= (jump_target & ~63);
                     decode_buffer <= 0;
                     /* verilator lint_off WIDTH */
                     fetch_skip <= (jump_target[58:63])&(~7);
                     internal_offset <= (jump_target[58:63])&(7);
                     //$write("io = %0h fs = %0h",internal_offset,fetch_skip);
-                    fetch_offset <= 0;
+                    //fetch_offset <= 0;
+                    end
                     jump_signal <= 1;
-                end
+             end
 
 //                if(jump_cond_flag)
 //                    fetch_rip <= (jump_target & ~63);
@@ -409,7 +430,6 @@ module Core (
     
     wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
     wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
-    wire can_decode = (fetch_offset - decode_offset >= 7'd15);
 
     /*
     All definitions (state elements) for ALU goes here
@@ -567,7 +587,6 @@ module Core (
             opcode_group,
             score_board,
             regfile,
-            can_decode,
             regA_contents,
             regB_contents,
             disp_contents,
@@ -589,8 +608,7 @@ module Core (
             jump_cond_flag,
             data_reqAddr,
             bytes_decoded_this_cycle,
-            store_writebackFlag,
-            can_decode_out
+            store_writebackFlag
         );
 
     mod_memstage m1(can_memstage, memstage_active, load_done, load_buffer,  
@@ -629,8 +647,10 @@ module Core (
             if(!jump_flag)
                 decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
             else begin
-                decode_offset <= 0;
-                fetch_offset <= 0;
+                if(!outstanding_fetch_req && !bus.respcyc) begin
+            //        decode_offset <= 0;
+            //        fetch_offset <= 0;
+                end
             end
 
             /*if(store_complete) begin

@@ -13,7 +13,6 @@ module mod_decode(
     input [0:255][0:0][0:3] opcode_group,
     input score_board[0:16-1],
     input [0:63] regfile[0:16-1],
-    input can_decode_in,
 
     output [0 : 63] regA_contents,
     output [0 : 63] regB_contents,
@@ -36,8 +35,7 @@ module mod_decode(
     output jump_cond_flag,
     output [0:63] data_reqAddr,
     output [0 : 3] bytes_decoded_this_cycle,
-    output store_writebackFlag,
-    output can_decode
+    output store_writebackFlag
 );
     
 /*
@@ -477,13 +475,14 @@ function logic check_dep();
     check_dep = depp;
 endfunction
     
-assign can_decode = can_decode_in;
 
 /*
  * This is the Decoder block. Any comments about Decode stage add here.
  *
  *
  */
+
+    wire can_decode = (fetch_offset - decode_offset >= 7'd15);
 
     always_comb begin
         dependency = 0;
@@ -549,6 +548,8 @@ assign can_decode = can_decode_in;
                 opcode = decode_bytes[offset*8 +: 1*8];
                 opcode_contents = opcode; // This is for storing the value in the pipeline reg
                 space_buffer[(offset)*8 +: 8] = opcode;
+                if(opcode == 235)
+                    $write("here");
                 offset += 1;
 
                 /*
