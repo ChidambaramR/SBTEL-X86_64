@@ -153,6 +153,7 @@ void System::tick(int clk) {
 	}
 
 	if (top->reqcyc) {
+                //cout << "Req cycles is set for xfer_addr " << xfer_addr << endl;
 		cmd = (top->reqtag >> 8) & 0xf;
 		if (rx_count) {
 			switch(cmd) {
@@ -212,6 +213,7 @@ void System::tick(int clk) {
 			assert(0);
 		};
 	} else {
+                //cout << "In else case";
 		top->reqack = 0;
 		rx_count = 0;
 	}

@@ -32,6 +32,11 @@ always_comb begin
             regfile[2] = exwb.alu_ext_result;
         end
 
+        else if(exwb.ctl_opcode == 255) begin
+            regfile[4] = regfile[4] - 8;
+            store_writebackFlag = 1;
+        end
+
         else if(exwb.ctl_opcode == 137 && store_memstage_active) begin
             //$write("here!! wr opcode = %x", exwb.ctl_opcode);
             // STORE INS

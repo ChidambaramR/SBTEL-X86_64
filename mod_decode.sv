@@ -13,6 +13,8 @@ module mod_decode(
     input [0:255][0:0][0:3] opcode_group,
     input score_board[0:16-1],
     input [0:63] regfile[0:16-1],
+    input callq_stage2,
+    input callq_stage3,
 
     output [0 : 63] regA_contents,
     output [0 : 63] regB_contents,
@@ -35,7 +37,8 @@ module mod_decode(
     output jump_cond_flag,
     output [0:63] data_reqAddr,
     output [0 : 3] bytes_decoded_this_cycle,
-    output store_writebackFlag
+    output store_writebackFlag,
+    output callqFlag
 );
     
 /*
@@ -720,8 +723,10 @@ endfunction
                         instr_buffer = decode_2_byte_opcode(opcode);
 
                         // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
-                        if (opcode == 5)        // 0F 05 (syscall)
+                        if (opcode == 5) begin        // 0F 05 (syscall)
                             opcode_enc_byte = "XXX";
+                            $finish;
+                        end
                         else if (opcode == 175) // 0F AF (imul)
                             opcode_enc_byte = "RM ";
                         else                    // 0F xx (jump inst)
@@ -792,22 +797,59 @@ endfunction
                             /*
                              * Case for IMUL instruction
                              */
-                            reg_buffer[0:31] = {reg_table_64[rmByte]};
-                            if(score_board[rmByte] == 0 && score_board[0] == 0) begin
-                                // Both RAX and dest register should be available
-                                // If we reach here, we are good
-                                //regByte_contents = regByte;
-                                regByte_contents = 0;
-                                rmByte_contents = rmByte;
-                                regA_contents = regfile[rmByte];
-                                regB_contents = regfile[0]; // HACK. We cannot directly use regfile[0] in ALU
-                                imm_contents = {64{1'b0}};
-                                dependency = 2;
+                            if(opcode == 255) begin
+                                if(score_board[rmByte] == 0 && score_board[regByte] == 0 /* RSP */) begin
+                                    if(callq_stage2) begin
+                                        can_decode = 0;
+                                        bytes_decoded_this_cycle = 0;
+                                        enable_memstage = 0;
+                                        jump_flag = 1; // Unconditional jump
+                                        jump_target = regfile[rmByte];
+                                        //$finish;
+                                    end
+                                    //else if(callq_stage3) begin
+                                    //end
+                                    else begin
+                                        callqFlag = 1;
+                                        regByte = 4; // Its not used anyways as CALLQ uses only 1.
+                                        store_reqFlag = 1;
+                                        store_ins = 1;
+                                        regByte_contents = regByte;
+                                        rmByte_contents = rmByte;
+                                        data_reqAddr = regfile[regByte] - 8;
+                                        store_word = rip + 2;
+                                        //$write("caught for callq RSP = %x word = %x", data_reqAddr, store_word);
+                                        // can_decode = 0;
+                                        dependency = 2;
+                                        //$finish;
+                                    end
+                                end
+                                else begin
+                                    offset = 0;
+                                    can_decode = 0;
+                                    enable_memstage = 0;
+                                end
+
+                                //$finish;
                             end
                             else begin
-                                offset = 0;
-                                can_decode = 0;
-                                enable_memstage = 0;
+                                reg_buffer[0:31] = {reg_table_64[rmByte]};
+                                if(score_board[rmByte] == 0 && score_board[0] == 0) begin
+                                    // Both RAX and dest register should be available
+                                    // If we reach here, we are good
+                                    //regByte_contents = regByte;
+                                    regByte_contents = 0;
+                                    rmByte_contents = rmByte;
+                                    regA_contents = regfile[rmByte];
+                                    regB_contents = regfile[0]; // HACK. We cannot directly use regfile[0] in ALU
+                                    imm_contents = {64{1'b0}};
+                                    dependency = 2;
+                                end
+                                else begin
+                                    offset = 0;
+                                    can_decode = 0;
+                                    enable_memstage = 0;
+                                end
                             end
                         end
                         else begin
@@ -866,7 +908,7 @@ endfunction
                                 else begin
                                     reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                             {reg_table_64[rmByte]}, {")"}};
-                                    $write("found you");
+                                    //$write("found you");
                                     if((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                           store_reqFlag = 1;
                                           regByte_contents = regByte;
@@ -1128,6 +1170,9 @@ endfunction
                 end
                 else if(store_reqFlag == 1) begin
                       can_decode = 0;
+                      if(callqFlag) begin
+                          offset = 0;
+                      end
                 end
 
             end

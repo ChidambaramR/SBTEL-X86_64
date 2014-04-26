@@ -98,6 +98,12 @@ always_comb begin
                 jump_cond_flag = 0;
             end
 
+            else if(memex.ctl_opcode == 49) begin
+              alu_result_exwb = memex.data_regA ^ memex.data_regB;
+              //$write("Hurray Xor'd %x", alu_result_exwb);
+              //$finish;
+            end
+
             else if(memex.ctl_opcode == 116) begin
                 // JE instruction
                 jump_cond_flag = 0;

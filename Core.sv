@@ -54,10 +54,16 @@ module Core (
     logic store_memstage_active;
     logic data_reqFlag;
     logic store_reqFlag;
+    logic callqFlag;
+    logic callq_stage2;
+    logic callq_stage3;
+
     logic [0:63] data_reqAddr;
 
     initial 
     begin
+        // Initial value of RSP from mailing list
+
         for (i = 0; i < 256; i++)
         begin
             //opcode_char[i] = empty_str;
@@ -68,6 +74,9 @@ module Core (
         for (j = 0; j <= 15; j++) begin
             regfile[j] = {64{1'b0}};
         end
+
+        regfile[4] = 31744;
+        callqFlag = 0;
 
         store_ack_received = 0;
         /*for (j = 0; j <= 14; j++) begin
@@ -168,6 +177,7 @@ module Core (
                     // Fetch request for jump instruction
                     outstanding_fetch_req <= 1;
                     bus.req <= fetch_rip & ~63;
+                               // $write("Sending req on bus 1");
                     bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
                     bus.reqcyc <= 1;
                     store_writeback <= 0;
@@ -185,6 +195,8 @@ module Core (
                 end
             end
             else if(store_ins && store_done) begin
+
+                // Handling store instruction
                 if(!outstanding_fetch_req) begin
                     if(cycle == 1) begin
                         bus.req <= (data_reqAddr & ~63);
@@ -201,20 +213,25 @@ module Core (
                             * we can start sending the data. This means that the memory has accepted our 
                             * requested.
                             */
-                            if(!(data_offset >= 64)) begin
+                            if(!(data_offset >= 56)) begin
+                                //$write("Sending req on bus 2");
                                 bus.reqcyc <= 1;
                                 store_ack_waiting <= 1;
                                 bus.req <= data_buffer[data_offset*8 +: 64];
-                                //if(data_offset == 16)
-                                  //  $finish;
+                         //       if(data_offset == 56)
+                         //           $finish;
                                 data_offset <= data_offset + 8;
                             end
                             else begin
                                 // We have completed sending the data
                                 store_opn <= 0;
                                 store_done <= 0;
-                                $write("wrote to memory");
-                                //$finish;
+                                //store_writebackFlag = 1;
+                                bus.req <= data_buffer[data_offset*8 +: 64];
+                                //$write("wrote to memory");
+                                if(callqFlag)
+                                    callq_stage2 <= 1;
+                      //          $finish;
                             end
                   //      end
                     end
@@ -361,14 +378,14 @@ module Core (
                           data_buffer[data_offset*8 +: 64] <= bus.resp;
                       
                       data_offset <= data_offset + 8;
-                      $display("Bus.resp = %x data_offset = %x",bus.resp, data_offset);
+                      //$display("Bus.resp = %x data_offset = %x",bus.resp, data_offset);
                       if(data_offset >= 56) begin
                           /*
                           * We have finished getting the contents in the data buffer. Now put the change buffer
                           * in the corresponding place.
                           */
                         //data_buffer[(data_offset)*8 +: 2*64] <= bus.resp;
-                        $write("Changed buffer = %x",data_buffer);
+                        //$write("Changed buffer = %x",data_buffer);
                         store_done <= 1;
                         //store_writeback <= 0;
                         cycle <= 1;
@@ -587,6 +604,9 @@ module Core (
             opcode_group,
             score_board,
             regfile,
+            callq_stage2,
+            callq_stage3,
+
             regA_contents,
             regB_contents,
             disp_contents,
@@ -608,7 +628,8 @@ module Core (
             jump_cond_flag,
             data_reqAddr,
             bytes_decoded_this_cycle,
-            store_writebackFlag
+            store_writebackFlag,
+            callqFlag
         );
 
     mod_memstage m1(can_memstage, memstage_active, load_done, load_buffer,  
