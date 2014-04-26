@@ -25,11 +25,11 @@ module mod_memstage(
     input store_memstage_active,
     input store_ins,
     input store_opn,
+
     output enable_execute,
     output loadbuffer_done,
     output data_reqFlag,
     output store_reqFlag,
-    
     // Temporary values which will be stored in the MEMEX pipeline register
     output [0:63] rip_memex,
     output [0 : 63] regA_contents_memex,
@@ -46,7 +46,7 @@ module mod_memstage(
 
     always_comb begin
         if (can_memstage) begin : memstage_block
-        if(!memstage_active && !store_memstage_active) begin
+        if (!memstage_active && !store_memstage_active) begin
                 rip_memex              = idmem.pc_contents;
                 regA_contents_memex    = idmem.data_regA;
                 regB_contents_memex    = idmem.data_regB;
@@ -64,8 +64,8 @@ module mod_memstage(
                 * Data req flag is set. This is a load ins
                 * For store instruction we dont have to worry about further pipeline stages
                 */
-                if(!store_ins) begin
-                    if(load_done) begin
+                if (!store_ins) begin
+                    if (load_done) begin
                       $write("load byte = %x",load_buffer);
                       rmByte_contents_memex  = idmem.ctl_rmByte;
                       regByte_contents_memex = idmem.ctl_regByte;
@@ -83,7 +83,7 @@ module mod_memstage(
                 end
                 else begin
                   // This is a STORE instruction
-                    if(store_opn == 0) begin
+                    if (store_opn == 0) begin
                         rmByte_contents_memex  = idmem.ctl_rmByte;
                         regByte_contents_memex = idmem.ctl_regByte;
                         opcode_contents_memex  = idmem.ctl_opcode;
