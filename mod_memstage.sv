@@ -6,7 +6,6 @@ typedef struct packed {
     // REGB Contents
     logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
@@ -34,7 +33,6 @@ module mod_memstage(
     output [0:63] rip_memex,
     output [0 : 63] regA_contents_memex,
     output [0 : 63] regB_contents_memex,
-    output [0 : 63] disp_contents_memex,
     output [0 : 63] imm_contents_memex,
     output [0 : 7] opcode_contents_memex,
     output [0 : 4-1] rmByte_contents_memex,     // 4 bit Register B INDEX for the ALU
@@ -50,7 +48,6 @@ module mod_memstage(
                 rip_memex              = idmem.pc_contents;
                 regA_contents_memex    = idmem.data_regA;
                 regB_contents_memex    = idmem.data_regB;
-                disp_contents_memex    = idmem.data_disp;
                 imm_contents_memex     = idmem.data_imm;
                 opcode_contents_memex  = idmem.ctl_opcode;
                 rmByte_contents_memex  = idmem.ctl_rmByte;
@@ -61,9 +58,9 @@ module mod_memstage(
             end
             else begin
                 /*
-                * Data req flag is set. This is a load ins
-                * For store instruction we dont have to worry about further pipeline stages
-                */
+                 * Data req flag is set. This is a load ins
+                 * For store instruction we dont have to worry about further pipeline stages
+                 */
                 if (!store_ins) begin
                     if (load_done) begin
                       $write("load byte = %x",load_buffer);

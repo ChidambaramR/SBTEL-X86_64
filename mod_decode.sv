@@ -13,19 +13,17 @@ module mod_decode (
     input score_board[0:16-1],
     input [0:63] regfile[0:16-1],
     input callq_stage2,
-    input callq_stage3,
 
-    output [0 : 63] regA_contents,
-    output [0 : 63] regB_contents,
-    output [0 : 63] disp_contents,
-    output [0 : 63] imm_contents,
-    output [0 : 7] opcode_contents,
-    output [0 : 4-1] rmByte_contents,   // 4 bit Register B INDEX for the ALU
-    output [0 : 4-1] regByte_contents,  // 4 bit Register A INDEX for the ALU
-    output [0 :1] dependency,
+    output [0:63] regA_contents,
+    output [0:63] regB_contents,
+    output [0:63] imm_contents,
+    output [0:7] opcode_contents,
+    output [0:4-1] rmByte_contents,   // 4 bit Register B INDEX for the ALU
+    output [0:4-1] regByte_contents,  // 4 bit Register A INDEX for the ALU
+    output [0:1] dependency,
     output sim_end_signal,              // Variable to keep track of simulation ending
     output [0:63] rip,
-    output [0 : 63] jump_target,
+    output [0:63] jump_target,
     output loadbuffer_done,
     output [0:8*8-1] store_word,
     output store_ins,
@@ -35,7 +33,7 @@ module mod_decode (
     output jump_flag,
     output jump_cond_flag,
     output [0:63] data_reqAddr,
-    output [0 : 3] bytes_decoded_this_cycle,
+    output [0:3] bytes_decoded_this_cycle,
     output store_writebackFlag,
     output callqFlag
 );
@@ -63,7 +61,6 @@ logic [0:8*8-1] shared_opcode[0:14][0:8];
 logic [0:15][0:3][0:7] reg_table_64;
 logic [0:7][0:7]empty_str = {"       "};
 logic [0:8] i = 0;
-logic [0:4] j = 0;
 logic [0:63] temp_crr;
 
 
@@ -404,29 +401,29 @@ function logic[0 : 16*8-1] byte8_to_str(logic[0 : 8*8-1] inp);
 endfunction
 
 /*
- * Returns the Instruction for a 2 byte Opcode value, i.e. of form "0F <opcode>"
+ * Returns the Instruction for a 2 byte Opcode value, i.e. of form "0F <fopcode>"
  */
-function logic[0 : 8*8-1] decode_2_byte_opcode (logic[0 : 7] opcode);
+function logic[0 : 8*8-1] decode_2_byte_opcode (logic[0 : 7] fopcode);
     logic[0 : 8*8-1] inst;
 
-    if (opcode == 5)        inst = "syscall ";   // 0F 05
-    else if (opcode == 128) inst = "jo      ";   // 0F 80
-    else if (opcode == 129) inst = "jno     ";   // 0F 81
-    else if (opcode == 130) inst = "jb      ";   // 0F 82
-    else if (opcode == 131) inst = "jae     ";   // 0F 83
-    else if (opcode == 132) inst = "je      ";   // 0F 84
-    else if (opcode == 133) inst = "jne     ";   // 0F 85
-    else if (opcode == 134) inst = "jbe     ";   // 0F 86
-    else if (opcode == 135) inst = "ja      ";   // 0F 87
-    else if (opcode == 136) inst = "js      ";   // 0F 88
-    else if (opcode == 137) inst = "jns     ";   // 0F 89
-    else if (opcode == 138) inst = "jpe     ";   // 0F 8A
-    else if (opcode == 139) inst = "jpo     ";   // 0F 8B
-    else if (opcode == 140) inst = "jl      ";   // 0F 8C
-    else if (opcode == 141) inst = "jge     ";   // 0F 8D
-    else if (opcode == 142) inst = "jle     ";   // 0F 8E
-    else if (opcode == 143) inst = "jg      ";   // 0F 8F
-    else if (opcode == 175) inst = "imul    ";   // 0F AF
+    if (fopcode == 5)        inst = "syscall ";   // 0F 05
+    else if (fopcode == 128) inst = "jo      ";   // 0F 80
+    else if (fopcode == 129) inst = "jno     ";   // 0F 81
+    else if (fopcode == 130) inst = "jb      ";   // 0F 82
+    else if (fopcode == 131) inst = "jae     ";   // 0F 83
+    else if (fopcode == 132) inst = "je      ";   // 0F 84
+    else if (fopcode == 133) inst = "jne     ";   // 0F 85
+    else if (fopcode == 134) inst = "jbe     ";   // 0F 86
+    else if (fopcode == 135) inst = "ja      ";   // 0F 87
+    else if (fopcode == 136) inst = "js      ";   // 0F 88
+    else if (fopcode == 137) inst = "jns     ";   // 0F 89
+    else if (fopcode == 138) inst = "jpe     ";   // 0F 8A
+    else if (fopcode == 139) inst = "jpo     ";   // 0F 8B
+    else if (fopcode == 140) inst = "jl      ";   // 0F 8C
+    else if (fopcode == 141) inst = "jge     ";   // 0F 8D
+    else if (fopcode == 142) inst = "jle     ";   // 0F 8E
+    else if (fopcode == 143) inst = "jg      ";   // 0F 8F
+    else if (fopcode == 175) inst = "imul    ";   // 0F AF
     else begin
         assert(0) else $fatal(1, "Invalid 2 byte Opcode");
         inst = "        ";  
@@ -793,8 +790,6 @@ always_comb begin
                                     jump_target = regfile[rmByte];
                                     //$finish;
                                 end
-                                //else if (callq_stage3) begin
-                                //end
                                 else begin
                                     callqFlag = 1;
                                     regByte = 4; // Its not used anyways as CALLQ uses only 1.
@@ -899,7 +894,7 @@ always_comb begin
                                       store_reqFlag = 1;
                                       regByte_contents = regByte;
                                       rmByte_contents = rmByte;
-                                      data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                      data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + regfile[rmByte];
                                       store_word = regfile[regByte];
                                       store_ins = 1;
                                       dependency = 2;
@@ -977,7 +972,7 @@ always_comb begin
                                       {reg_table_64[regByte]}};
                                 if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                     data_reqFlag = 1;
-                                    data_reqAddr = byte_swap(disp_byte) + regfile[rmByte];
+                                    data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + regfile[rmByte];
                                     regByte_contents = regByte;
                                     rmByte_contents = rmByte;
                                     dependency = 2;

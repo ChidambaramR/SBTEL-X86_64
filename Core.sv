@@ -16,7 +16,7 @@ logic[0:8*8-1] store_word;
 logic store_ins;
 logic store_writeback;
 logic store_writebackFlag;
-logic store_ack_waiting;
+//logic store_ack_waiting;
 logic store_done;
 logic store_opn;
 logic store_ack_received;
@@ -39,8 +39,8 @@ logic [0:4] j = 0;
 // 2D Array
 logic [0:255][0:0][0:3] opcode_group;
 
-logic [0:63] internal_offset;
-logic [0:63] internal_data_offset;
+logic [0:6] internal_offset;
+logic [0:5] internal_data_offset;
 
 logic can_memstage;
 logic can_execute;
@@ -56,7 +56,6 @@ logic data_reqFlag;
 logic store_reqFlag;
 logic callqFlag;
 logic callq_stage2;
-logic callq_stage3;
 
 logic [0:63] data_reqAddr;
 
@@ -69,7 +68,7 @@ initial begin
     end
 
     for (j = 0; j <= 15; j++) begin
-        regfile[j] = {64{1'b0}};
+        regfile[j[1:4]] = {64{1'b0}};
     end
 
     regfile[4] = 31744;
@@ -211,7 +210,7 @@ always @ (posedge bus.clk) begin
                         if (!(data_offset >= 56)) begin
                             //$write("Sending req on bus 2");
                             bus.reqcyc <= 1;
-                            store_ack_waiting <= 1;
+                            //store_ack_waiting <= 1;
                             bus.req <= data_buffer[data_offset*8 +: 64];
                             //if (data_offset == 56)
                             //    $finish;
@@ -261,7 +260,8 @@ always @ (posedge bus.clk) begin
                 fetch_offset <= 0;
                 decode_offset <= 0;
                 jump_signal <= 0;
-                jump_flag = 0;
+                /* verilator lint_off BLKSEQ */
+                jump_flag = 0;  // TODO: Is this correct?
             end
             assert(!send_fetch_req) else $fatal;
             outstanding_fetch_req <= 0;
@@ -326,22 +326,23 @@ always @ (posedge bus.clk) begin
                     fetch_data_skip <= fetch_data_skip - 8;
                 end else begin
                     if (!load_done) begin
+                        load_buffer <= 64'b0;
                         if (internal_data_offset == 0)
-                            load_buffer <= bus.resp[63:56];
+                            load_buffer[56:63] <= bus.resp[63:56];
                         else if (internal_data_offset == 1)
-                            load_buffer <= bus.resp[55:48];
+                            load_buffer[56:63] <= bus.resp[55:48];
                         else if (internal_data_offset == 2)
-                            load_buffer <= bus.resp[47:40];
+                            load_buffer[56:63] <= bus.resp[47:40];
                         else if (internal_data_offset == 3)
-                            load_buffer <= bus.resp[39:32];
+                            load_buffer[56:63] <= bus.resp[39:32];
                         else if (internal_data_offset == 4)
-                            load_buffer <= bus.resp[31:24];
+                            load_buffer[56:63] <= bus.resp[31:24];
                         else if (internal_data_offset == 5)
-                            load_buffer <= bus.resp[23:16];
+                            load_buffer[56:63] <= bus.resp[23:16];
                         else if (internal_data_offset == 6)
-                            load_buffer <= bus.resp[15:8];
+                            load_buffer[56:63] <= bus.resp[15:8];
                         else if (internal_data_offset == 7)
-                            load_buffer <= bus.resp[7:0];
+                            load_buffer[56:63] <= bus.resp[7:0];
                         //$display("orig resp %x",bus.resp);
                         //$display("resp %x io = %x",bus.resp[55:0], internal_offset);
                         //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
@@ -443,7 +444,6 @@ typedef struct packed {
     // REGB Contents
     logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
@@ -461,7 +461,6 @@ typedef struct packed {
     // REGB Contents
     logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
@@ -477,11 +476,7 @@ typedef struct packed {
     // ALU Result
     logic [0:63] alu_result;
     logic [0:63] alu_ext_result;
-    // REGB Contents
-    logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
-    logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
@@ -512,7 +507,6 @@ typedef struct packed {
 logic [0:63] rip;
 logic[0 : 63] regA_contents;
 logic[0 : 63] regB_contents;
-logic[0 : 63] disp_contents;
 logic[0 : 63] imm_contents;
 logic[0 : 7] opcode_contents;
 logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
@@ -524,7 +518,6 @@ logic sim_end_signal;               // Variable to keep track of simulation endi
 logic [0:63] rip_memex;
 logic[0 : 63] regA_contents_memex;
 logic[0 : 63] regB_contents_memex;
-logic[0 : 63] disp_contents_memex;
 logic[0 : 63] imm_contents_memex;
 logic[0 : 7] opcode_contents_memex;
 logic[0 : 4-1] rmByte_contents_memex;     // 4 bit Register B INDEX for the ALU
@@ -538,7 +531,6 @@ logic [0:1]  dep_exwb;
 logic sim_end_signal_exwb;
 logic[0 : 63] alu_result_exwb;
 logic[0 : 63] alu_ext_result_exwb;
-logic[0 : 63] regB_contents_exwb;
 logic[0 : 4-1] regByte_contents_exwb;
 logic[0 : 4-1] rmByte_contents_exwb;
 logic[0 : 8-1] opcode_exwb;
@@ -551,6 +543,7 @@ logic jump_cond_flag;
 logic[0 : 63] jump_target;
 
 /* verilator lint_off UNUSED */
+/* verilator lint_off UNDRIVEN */
 ID_MEM idmem;
 MEM_EX memex;
 EX_WB exwb;
@@ -567,9 +560,9 @@ mod_decode dec (
         // INPUT PARAMS
         can_writeback, data_req, memstage_active, store_memstage_active, jump_signal,
         jump_cond_signal, fetch_rip, fetch_offset, decode_offset, decode_bytes,
-        opcode_group, score_board, regfile, callq_stage2, callq_stage3,
+        opcode_group, score_board, regfile, callq_stage2,
         // OUTPUT PARAMS
-        regA_contents, regB_contents, disp_contents, imm_contents, opcode_contents,
+        regA_contents, regB_contents, imm_contents, opcode_contents,
         rmByte_contents, regByte_contents, dependency, sim_end_signal, rip,
         jump_target, loadbuffer_done, store_word, store_ins, enable_memstage,
         store_reqFlag, data_reqFlag, jump_flag, jump_cond_flag, data_reqAddr,
@@ -582,7 +575,7 @@ mod_memstage mem (
         store_ins, store_opn,
         //OUTPUT PARAMS
         enable_execute, loadbuffer_done, data_reqFlag, store_reqFlag, rip_memex, regA_contents_memex,
-        regB_contents_memex, disp_contents_memex, imm_contents_memex, opcode_contents_memex,
+        regB_contents_memex, imm_contents_memex, opcode_contents_memex,
         rmByte_contents_memex, regByte_contents_memex, dependency_memex, sim_end_signal_memex
     );
 
@@ -653,7 +646,6 @@ always @ (posedge bus.clk) begin
             idmem.pc_contents <= rip;
             idmem.data_regA <= regA_contents;
             idmem.data_regB <= regB_contents;
-            idmem.data_disp <= disp_contents;
             idmem.data_imm <= imm_contents;
             idmem.ctl_opcode <= opcode_contents;
             idmem.ctl_rmByte <= rmByte_contents;
@@ -680,7 +672,6 @@ always @ (posedge bus.clk) begin
             memex.pc_contents <= rip_memex;
             memex.data_regA <= regA_contents_memex;
             memex.data_regB <= regB_contents_memex;
-            memex.data_disp <= disp_contents_memex;
             memex.data_imm <= imm_contents_memex;
             memex.ctl_opcode <= opcode_contents_memex;
             memex.ctl_rmByte <= rmByte_contents_memex;
@@ -702,7 +693,6 @@ always @ (posedge bus.clk) begin
             exwb.pc_contents <= rip_exwb;
             exwb.alu_result <= alu_result_exwb;
             exwb.alu_ext_result <= alu_ext_result_exwb;
-            exwb.data_regB <= regB_contents_exwb;
             exwb.ctl_rmByte <= rmByte_contents_exwb;
             exwb.ctl_regByte <= regByte_contents_exwb;
             exwb.sim_end <= sim_end_signal_exwb; 

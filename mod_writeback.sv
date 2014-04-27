@@ -5,11 +5,7 @@ typedef struct packed {
     // ALU Result
     logic [0:63] alu_result;
     logic [0:63] alu_ext_result;
-    // REGB Contents
-    logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
-    logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
@@ -18,6 +14,7 @@ typedef struct packed {
 
 module mod_writeback (
     input can_writeback,
+    /* verilator lint_off UNUSED */
     input EX_WB exwb,
     input store_memstage_active,
     output [0:63] regfile[0:16-1],

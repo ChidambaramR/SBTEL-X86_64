@@ -15,7 +15,6 @@ typedef struct packed {
     // REGB Contents
     logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
@@ -41,6 +40,8 @@ typedef struct packed {
 } flags_reg;
 
 module mod_execute (    
+    /* verilator lint_off UNUSED */
+    /* verilator lint_off UNDRIVEN */
     input can_execute,
     input MEM_EX memex,
     input [0:8*8-1] load_buffer,
@@ -67,7 +68,7 @@ logic[0 : 127] data_regAA;
 logic[0 : 127] data_regBB;
 logic[0 : 64] ext_addReg;
 logic[0 : 16*8-1] temp16;
-logic [0:8] i;
+logic[0 : 63] i;
 
 always_comb begin
     if (can_execute) begin : execute_block
@@ -137,7 +138,7 @@ always_comb begin
                 ext_addReg = memex.data_imm + memex.data_regA;
                 //$write("data_imm = %0h, data_regA = %0h ext_addReg = %0h",memex.data_imm, memex.data_regA, ext_addReg[1:64]);
                 alu_result_exwb = ext_addReg[1:64];
-                rflags.cf = ext_addReg[64];
+                rflags.cf = ext_addReg[0];
             end
             else if (memex.ctl_regByte == 7) begin
                 // CMP instruction
@@ -196,13 +197,13 @@ always_comb begin
                 end
             end
             else begin
-                for (i = 0; i < memex.data_imm; i=i+1)
+                for (i = 0; i < memex.data_imm; i = i+1)
                 begin
                     alu_result_exwb = alu_result_exwb / 2;
                 end
             end
         end
-        //$display("PC  = %0h, regA = %0h, regB = %0h, disp = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_disp, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
+        //$display("PC  = %0h, regA = %0h, regB = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
         rip_exwb = memex.pc_contents;
         if (memex.ctl_opcode != 125 && memex.ctl_opcode != 116 ) begin
             /*
