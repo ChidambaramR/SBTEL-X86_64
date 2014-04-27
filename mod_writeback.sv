@@ -5,11 +5,7 @@ typedef struct packed {
     // ALU Result
     logic [0:63] alu_result;
     logic [0:63] alu_ext_result;
-    // REGB Contents
-    logic [0:63] data_regB;
     // Control signals
-    logic [0:63] data_disp;
-    logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
@@ -17,32 +13,33 @@ typedef struct packed {
 } EX_WB;
 
 module mod_writeback (
-        input can_writeback,
-        input EX_WB exwb,
-        input store_memstage_active,
-        output [0:63] regfile[0:16-1],
-        output [0:1]  dep_exwb,
-        output store_writebackFlag
+    input can_writeback,
+    /* verilator lint_off UNUSED */
+    input EX_WB exwb,
+    input store_memstage_active,
+    output [0:63] regfile[0:16-1],
+    output [0:1]  dep_exwb,
+    output store_writebackFlag
 );
 
 always_comb begin
     if (can_writeback) begin : writeback_block
-        if(exwb.ctl_opcode == 247) begin
+        if (exwb.ctl_opcode == 247) begin
             regfile[0] = exwb.alu_result;
             regfile[2] = exwb.alu_ext_result;
         end
 
-        else if(exwb.ctl_opcode == 255) begin
+        else if (exwb.ctl_opcode == 255) begin
             regfile[4] = regfile[4] - 8;
             store_writebackFlag = 1;
         end
 
-        else if(exwb.ctl_opcode == 137 && store_memstage_active) begin
+        else if (exwb.ctl_opcode == 137 && store_memstage_active) begin
             //$write("here!! wr opcode = %x", exwb.ctl_opcode);
             // STORE INS
             store_writebackFlag = 1;
         end
-        else if(exwb.ctl_opcode == 139) begin
+        else if (exwb.ctl_opcode == 139) begin
             // LOAD INS
             regfile[exwb.ctl_regByte] = exwb.alu_result;
         end
@@ -51,7 +48,7 @@ always_comb begin
         end
         dep_exwb = 0;
         //$display("Issuing writeback");
-        if(exwb.sim_end == 1)
+        if (exwb.sim_end == 1)
             $finish;
     end
 end
