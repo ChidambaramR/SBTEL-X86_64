@@ -29,9 +29,27 @@ always_comb begin
             regfile[2] = exwb.alu_ext_result;
         end
 
-        else if (exwb.ctl_opcode == 255) begin
+        else if (exwb.ctl_opcode == 255 || exwb.ctl_opcode == 232) begin
             regfile[4] = regfile[4] - 8;
             store_writebackFlag = 1;
+        end
+
+        else if ((exwb.ctl_opcode >= 80) && (exwb.ctl_opcode <= 95)) begin
+            // PUSH / POP instruction
+            if(exwb.ctl_opcode >= 88) begin
+                // POP
+                //$write("POP");
+                regfile[4] = regfile[4] + 8;
+                regfile[exwb.ctl_rmByte] = exwb.alu_result;
+                //$finish;
+            end
+            else begin
+                // PUSH
+              $write("PUSH");
+              regfile[4] = regfile[4] - 8;
+              store_writebackFlag = 1;
+              $finish;
+            end
         end
 
         else if (exwb.ctl_opcode == 137 && store_memstage_active) begin
@@ -45,6 +63,7 @@ always_comb begin
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;
+            //$write("Writing %0h into %0h",exwb.alu_result, exwb.ctl_rmByte);
         end
         dep_exwb = 0;
         //$display("Issuing writeback");
