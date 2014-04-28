@@ -63,7 +63,7 @@ module mod_memstage(
                  */
                 if (!store_ins) begin
                     if (load_done) begin
-                      $write("load byte = %x",load_buffer);
+                      //$write("load byte = %x",load_buffer);
                       rmByte_contents_memex  = idmem.ctl_rmByte;
                       regByte_contents_memex = idmem.ctl_regByte;
                       opcode_contents_memex  = idmem.ctl_opcode;

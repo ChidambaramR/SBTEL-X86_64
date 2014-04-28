@@ -4,6 +4,8 @@ movq %rbx, 0x100(%rax)
 mov $0x7FFFE7, %rax
 movq 0x100(%rax), %rbx
 imul %rax
+callq *%rdi
+sub $0x1, %rsp
 l1:
 imul %rax
 imul %rbx

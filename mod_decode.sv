@@ -13,6 +13,7 @@ module mod_decode (
     input score_board[0:16-1],
     input [0:63] regfile[0:16-1],
     input callq_stage2,
+    input [0:8*8-1] load_buffer,
 
     output [0:63] regA_contents,
     output [0:63] regB_contents,
@@ -68,6 +69,7 @@ logic [0:63] temp_crr;
  * All definitions (state elements) for DECODER goes here
  */
 logic[0 : 7] opcode;
+logic[0 : 7] temp_opcode;
 logic[0 : 3] offset;
 logic[0 : 23] opcode_enc_byte; // Store encoding for given opcode
 logic[0 : 4*8-1] disp_byte;
@@ -488,6 +490,7 @@ always_comb begin
         low_byte = 0;
         rex_prefix = 0;
         prefix = 0;
+        //callq_stage2 = 0;
         jump_target = 0;
         loadbuffer_done = 0;
         data_reqFlag = 0;
@@ -583,18 +586,43 @@ always_comb begin
                  * Refer to Table 3-1 of Intel Manual
                  */
                 instr_buffer = opcode_char[opcode];
+                temp_opcode = opcode;
 
                 if (opcode >= 88)
                     opcode = opcode - 8;
 
                 opcode = opcode - 80;
                 reg_buffer[0:31] = reg_table_64[opcode];
+                
+                regByte = 4;
+                rmByte = opcode[0:3];
+                regByte_contents = regByte;
+                rmByte_contents = rmByte;
 
-                if (score_board[opcode[0:3]] == 0) begin
+                regByte_contents = 4;
+
+                if ((score_board[opcode[0:3]] == 0) && score_board[4] == 0 /* RSP */) begin
                     // Checking for availability of registers
                     regA_contents = regfile[opcode[0:3]]; // Get the 8 byte register content and store in temp register
                     regB_contents = {{64{1'b1}}};
-                    dependency = 1;
+                    dependency = 2;
+                    if(temp_opcode >= 88) begin
+                        // POP %rsi --> data_reqAddr = RSP (regfile[4]
+                        data_reqFlag = 1;
+                        data_reqAddr = regfile[regByte]; 
+                        //$write("decode POP");
+                        //$finish;
+                    end
+                    else begin
+                        // PUSH %rbp --> store_word = regfile[rbp], data_reqAddr = RSP-8
+                        store_ins = 1;
+                        store_reqFlag = 1;
+                        regByte = 4;
+                        data_reqAddr = regfile[regByte] - 8; // RSP - 8
+                        store_word = regfile[rmByte];
+                        //$write("decode PUSH");
+                        //$finish;
+                    end
                 end
                 else begin
                     offset = 0;
@@ -626,6 +654,7 @@ always_comb begin
                     imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
                     opcode = opcode - 184;
                     rmByte_contents = opcode[4:7];
+                    //$write("In decode %x",rmByte_contents);
                     //$write("opcode = %s rm %0h",reg_table_64[rmByte_contents], rmByte_contents);
                     regByte_contents = 0;
                     dependency = 1;
@@ -708,7 +737,7 @@ always_comb begin
                     // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
                     if (opcode == 5) begin        // 0F 05 (syscall)
                         opcode_enc_byte = "XXX";
-                        $finish;
+                        //$finish;
                     end
                     else if (opcode == 175) // 0F AF (imul)
                         opcode_enc_byte = "RM ";
@@ -788,6 +817,7 @@ always_comb begin
                                     enable_memstage = 0;
                                     jump_flag = 1; // Unconditional jump
                                     jump_target = regfile[rmByte];
+                                    callqFlag = 0;
                                     //$finish;
                                 end
                                 else begin
@@ -881,8 +911,8 @@ always_comb begin
                                  * is displayed as 0xffffffffffffff08. So extending and storing in the reg buffer here.
                                  * I believe this is some of the OPCODE Exceptions.
                                  */
-                                signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
-                                reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
+                                  signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
+                                  reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
                                     {"("}, {reg_table_64[rmByte]}, {")"}};
                             end
 
@@ -1119,16 +1149,90 @@ always_comb begin
  
                     temp_crr = rel_to_abs_addr(rip, byte_swap(disp_byte), offset);
                     reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
-                    bytes_decoded_this_cycle = 0;
-                    jump_cond_flag = 1;
-                    enable_memstage = 0;
-                    jump_target = temp_crr;
+                    if(opcode == 232) begin
+                        // Callq instruction
+                        if (score_board[regByte] == 0 /* RSP */) begin
+                            if (callq_stage2) begin
+                                can_decode = 0;
+                                bytes_decoded_this_cycle = 0;
+                                enable_memstage = 0;
+                                jump_flag = 1; // Unconditional jump
+                                jump_target = temp_crr; 
+                                callqFlag = 0;
+                                //$finish;
+                            end
+                            else begin
+                                callqFlag = 1;
+                                regByte = 4; // Its not used anyways as CALLQ uses only 1.
+                                store_reqFlag = 1;
+                                store_ins = 1;
+                                regByte_contents = 4;
+                                rmByte_contents = 4;
+                                data_reqAddr = regfile[regByte] - 8;
+                                store_word = temp_crr;
+                                //$write("caught for callq RSP = %x word = %x", data_reqAddr, store_word);
+                                // can_decode = 0;
+                                dependency = 1;
+                                //$finish;
+                            end
+                        end
+                        else begin
+                            offset = 0;
+                            can_decode = 0;
+                            enable_memstage = 0;
+                        end
+                    end
+                    else begin
+                        // Conditional jump
+                        bytes_decoded_this_cycle = 0;
+                        jump_target = temp_crr;
+                        enable_memstage = 0;
+                        jump_cond_flag = 1;
+                    end
                 end
             end
         end else begin
             /* Dont need to support other Prefixes. Just printing out the prefix name */
             instr_buffer = opcode_char[prefix];
         end 
+
+        // Note: Currently we finish on retq instruction. Later we might want to change below condition.
+        if (instr_buffer == "retq    ") begin
+            if (score_board[4] == 0 /* RSP */) begin
+                if (callq_stage2) begin
+                    can_decode = 0;
+                    bytes_decoded_this_cycle = 0;
+                    enable_memstage = 0;
+                    jump_flag = 1; // Unconditional jump
+                    jump_target = load_buffer;
+                    $write("load buffer = %x",load_buffer);
+                    callqFlag = 0;
+                    $finish;
+                end
+                else begin
+                    callqFlag = 1;
+                    regByte = 4; // Its not used anyways as CALLQ uses only 1.
+                    rmByte = 4;
+                    regByte_contents = regByte;
+                    rmByte_contents = rmByte;
+                    $write("caught for retq RSP = %x", regfile[4]);
+                    dependency = 1;
+                    data_reqFlag = 1;
+                    data_reqAddr = regfile[regByte]; 
+                    offset = 0;
+                    //$finish;
+                end
+            end
+            else begin
+                can_decode = 0;
+                offset = 0;
+                enable_memstage = 0;
+            end
+            //$finish;
+            //sim_end_signal = 1; // Simulation should end
+        end
+        else
+            sim_end_signal = 0; // Simulation should not end
 
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
@@ -1160,14 +1264,6 @@ always_comb begin
 
         bytes_decoded_this_cycle =+ offset;
 
-        // Note: Currently we finish on retq instruction. Later we might want to change below condition.
-        if (instr_buffer == "retq    ") begin
-            can_decode = 0;
-            enable_memstage = 0;
-            sim_end_signal = 1; // Simulation should end
-        end
-        else
-            sim_end_signal = 0; // Simulation should not end
 
     end else begin
         enable_memstage = 0;

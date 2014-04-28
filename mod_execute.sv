@@ -86,6 +86,7 @@ always_comb begin
             // Mov Imm
             //regfile[memex.ctl_rmByte] = memex.data_imm;
             alu_result_exwb = memex.data_imm;
+            //$write("rm byte contents = %x",rmByte_contents_exwb);
             //$write("alu %0h rmByte %0h", alu_result_exwb, rmByte_contents_exwb);
         end
 
@@ -93,6 +94,16 @@ always_comb begin
             // Load instruction. ex: mov $0x100(%rax), %rbx
             //$write("Asssigning the value to pipeline register");
             alu_result_exwb = load_buffer; // The load buffer is filled in the mem stage
+        end
+
+        else if ((memex.ctl_opcode >= 80) && (memex.ctl_opcode < 88)) begin
+            // PUSH 
+        end
+
+        else if ((memex.ctl_opcode >= 88) && (memex.ctl_opcode < 96)) begin
+            // POP
+            //$write("Execute POP");
+            alu_result_exwb = load_buffer;
         end
 
         else if (memex.ctl_opcode == 141 || memex.ctl_opcode == 125) begin
@@ -123,9 +134,9 @@ always_comb begin
             // Check table A-6 of INTEL manual
             if (memex.ctl_regByte == 4) begin
                 // AND instruction
-                //$display("data_imm = %0h data_regA = %0h result = %0h", memex.data_imm, memex.data_regA, (memex.data_imm & memex.data_regA));
                 //regfile[memex.ctl_rmByte] = memex.data_imm & memex.data_regA;
                 alu_result_exwb = memex.data_imm & memex.data_regA;
+                //$display("data_imm = %0h data_regA = %0h result = %0h", memex.data_imm, memex.data_regA, (alu_result_exwb));
             end
             else if (memex.ctl_regByte == 1) begin
                 // OR Instruction

@@ -197,6 +197,7 @@ always @ (posedge bus.clk) begin
                         bus.reqcyc <= 1;
                         bus.reqtag <= { bus.WRITE, bus.MEMORY, {6'b0,1'b1,1'b1}};
                         cycle <= 0;
+                        data_offset <= 0;
                         store_writeback <= 0;
                     end
                     else if (store_ack_received) begin
@@ -242,6 +243,7 @@ always @ (posedge bus.clk) begin
                     bus.reqcyc <= 1;
                     data_offset <= 0;
                     data_buffer <= 0;
+                    load_buffer <= 0;
                     once <= 1;
                     store_writeback <= 0;
                     outstanding_fetch_req <= 1;
@@ -263,6 +265,7 @@ always @ (posedge bus.clk) begin
                 /* verilator lint_off BLKSEQ */
                 jump_flag = 0;  // TODO: Is this correct?
             end
+
             assert(!send_fetch_req) else $fatal;
             outstanding_fetch_req <= 0;
             fetch_state <= fetch_active;
@@ -319,10 +322,9 @@ always @ (posedge bus.clk) begin
             fetch_state <= fetch_active;
             if (!store_ins) begin
                 // We are here for a LOAD instruction
+                /*
                 if ((fetch_data_skip) > 0) begin
-                    /*
-                     * Fetch skip is up only when there is a response for the first time. 
-                     */
+                    // Fetch skip is up only when there is a response for the first time. 
                     fetch_data_skip <= fetch_data_skip - 8;
                 end else begin
                     if (!load_done) begin
@@ -343,6 +345,7 @@ always @ (posedge bus.clk) begin
                             load_buffer[56:63] <= bus.resp[15:8];
                         else if (internal_data_offset == 7)
                             load_buffer[56:63] <= bus.resp[7:0];
+                        load_buffer <= bus.resp;
                         //$display("orig resp %x",bus.resp);
                         //$display("resp %x io = %x",bus.resp[55:0], internal_offset);
                         //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
@@ -350,6 +353,18 @@ always @ (posedge bus.clk) begin
                         load_done <= 1;
                     end
                 end
+                */
+                if ((fetch_data_skip) > 0) begin
+                    // Fetch skip is up only when there is a response for the first time. 
+                    fetch_data_skip <= fetch_data_skip - 8;
+                end
+                else if(!load_done) begin
+                    load_buffer[(data_offset*8) +: 64] <= bus.resp;
+                    load_done <= 1;
+                    if(callqFlag)
+                        callq_stage2 <= 1;
+                end
+                data_offset <= data_offset + 8;
             end
             else begin
                 // This is the flag which controls whether STORE operation has completed or not. If 0, not complete
@@ -405,6 +420,8 @@ always @ (posedge bus.clk) begin
                 //fetch_offset <= 0;
                 end
                 jump_signal <= 1;
+                if(callq_stage2)
+                    callq_stage2 <= 0;
             end
 
             //if (jump_cond_flag)
@@ -560,7 +577,7 @@ mod_decode dec (
         // INPUT PARAMS
         can_writeback, data_req, memstage_active, store_memstage_active, jump_signal,
         jump_cond_signal, fetch_rip, fetch_offset, decode_offset, decode_bytes,
-        opcode_group, score_board, regfile, callq_stage2,
+        opcode_group, score_board, regfile, callq_stage2, load_buffer,
         // OUTPUT PARAMS
         regA_contents, regB_contents, imm_contents, opcode_contents,
         rmByte_contents, regByte_contents, dependency, sim_end_signal, rip,
