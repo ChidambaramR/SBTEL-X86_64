@@ -216,7 +216,7 @@ always_comb begin
         end
         //$display("PC  = %0h, regA = %0h, regB = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
         rip_exwb = memex.pc_contents;
-        if (memex.ctl_opcode != 125 && memex.ctl_opcode != 116 ) begin
+        if (memex.ctl_opcode != 125 && memex.ctl_opcode != 116 /*&& memex.ctl_opcode != 195*/) begin
             /*
              * We dont want the write back stage for conditional jumps.
              * We just want the ALU to execute and set the flags for resteering the fetch

@@ -34,6 +34,12 @@ always_comb begin
             store_writebackFlag = 1;
         end
 
+        else if (exwb.ctl_opcode == 195) begin
+            // RETQ
+            $write("Write for retq");
+            regfile[4] = regfile[4] + 8;
+        end
+
         else if ((exwb.ctl_opcode >= 80) && (exwb.ctl_opcode <= 95)) begin
             // PUSH / POP instruction
             if(exwb.ctl_opcode >= 88) begin
