@@ -25,14 +25,12 @@ logic store_opn;
 logic store_ack_received;
 
 logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
-logic loadbuffer_done;
 logic[5:0] fetch_skip;
 logic[5:0] fetch_store_skip;
 logic[5:0] fetch_data_skip;
 logic[6:0] fetch_offset, decode_offset;
 logic[0:6] data_offset;
 logic[0:63] regfile[0:16-1];
-logic score_board[0:16-1];
 logic once;
 logic cycle;
 
@@ -45,18 +43,8 @@ logic [0:255][0:0][0:3] opcode_group;
 logic [0:6] internal_offset;
 logic [0:5] internal_data_offset;
 
-logic can_memstage;
-logic can_execute;
-logic can_writeback;
-logic enable_memstage;
-logic enable_execute;
-logic enable_writeback;
 
 logic data_req;
-logic memstage_active;
-logic store_memstage_active;
-logic data_reqFlag;
-logic store_reqFlag;
 logic callqFlag;
 logic callq_stage2;
 
@@ -455,6 +443,25 @@ end
 wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
 wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
 
+/*
+* Refer to wiki page of RFLAGS for the bit pattern
+*/ 
+typedef struct packed {
+    logic [12:63] unused;
+    logic of; // Overflow flag
+    logic df; // Direction flag
+    logic If; // Interrupt flag. Not the capital case for I
+    logic tf; // trap flag
+    logic sf; // sign flag
+    logic zf; // zero flag
+    logic res_3; // reserved bit. Should be set to 0
+    logic af; // adjust flag
+    logic res_2; // reserved bit. should be set to 0
+    logic pf; // Parity flag
+    logic res_1; // reserved bit. should be set to 1
+    logic cf; // Carry flag
+} flags_reg;
+
 // Refer to slide 11 of 43 in CSE502-L4-Pipilining.pdf
 typedef struct packed {
     // PC + 1
@@ -503,63 +510,13 @@ typedef struct packed {
     logic sim_end;
 } EX_WB;
 
-/*
-* Refer to wiki page of RFLAGS for the bit pattern
-*/ 
-typedef struct packed {
-    logic [12:63] unused;
-    logic of; // Overflow flag
-    logic df; // Direction flag
-    logic If; // Interrupt flag. Not the capital case for I
-    logic tf; // trap flag
-    logic sf; // sign flag
-    logic zf; // zero flag
-    logic res_3; // reserved bit. Should be set to 0
-    logic af; // adjust flag
-    logic res_2; // reserved bit. should be set to 0
-    logic pf; // Parity flag
-    logic res_1; // reserved bit. should be set to 1
-    logic cf; // Carry flag
-} flags_reg;
 
 
-// Temporary values which will be stored in the IDMEM pipeline register
 logic [0:63] rip;
-logic[0 : 63] regA_contents;
-logic[0 : 63] regB_contents;
-logic[0 : 63] imm_contents;
-logic[0 : 7] opcode_contents;
-logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
-logic[0 : 4-1] regByte_contents;    // 4 bit Register A INDEX for the ALU
-logic[0 :1] dependency;
-logic sim_end_signal;               // Variable to keep track of simulation ending
-
-// Temporary values which will be stored in the MEMEX pipeline register
-logic [0:63] rip_memex;
-logic[0 : 63] regA_contents_memex;
-logic[0 : 63] regB_contents_memex;
-logic[0 : 63] imm_contents_memex;
-logic[0 : 7] opcode_contents_memex;
-logic[0 : 4-1] rmByte_contents_memex;     // 4 bit Register B INDEX for the ALU
-logic[0 : 4-1] regByte_contents_memex;    // 4 bit Register A INDEX for the ALU
-logic[0 :1] dependency_memex;
-logic sim_end_signal_memex;               // Variable to keep track of simulation ending
-
-// Temporary values to be given to the EXWB pipeline register
-logic [0:63] rip_exwb;
-logic [0:1]  dep_exwb;
-logic sim_end_signal_exwb;
-logic[0 : 63] alu_result_exwb;
-logic[0 : 63] alu_ext_result_exwb;
-logic[0 : 4-1] regByte_contents_exwb;
-logic[0 : 4-1] rmByte_contents_exwb;
-logic[0 : 8-1] opcode_exwb;
 
 logic[0 : 3] bytes_decoded_this_cycle;    
 logic jump_flag;
 logic jump_signal;
-logic jump_cond_signal;
-logic jump_cond_flag;
 logic[0 : 63] jump_target;
 
 /* verilator lint_off UNUSED */
@@ -578,44 +535,15 @@ end
 
 mod_decode dec (
         // INPUT PARAMS
-        can_writeback, data_req, memstage_active, store_memstage_active, jump_signal,
-        jump_cond_signal, fetch_rip, fetch_offset, decode_offset, decode_bytes,
-        opcode_group, score_board, regfile, callq_stage2, load_buffer,
+        jump_signal, fetch_rip, fetch_offset, decode_offset, 
+        decode_bytes, opcode_group, callq_stage2, load_buffer, store_writeback, 
         // OUTPUT PARAMS
-        regA_contents, regB_contents, imm_contents, opcode_contents,
-        rmByte_contents, regByte_contents, dependency, sim_end_signal, rip,
-        jump_target, loadbuffer_done, store_word, store_ins, enable_memstage,
-        store_reqFlag, data_reqFlag, jump_flag, jump_cond_flag, data_reqAddr,
-        bytes_decoded_this_cycle, store_writebackFlag, callqFlag
-    );
+        regfile, rflags, load_done, memex, exwb, rip, 
+        jump_target, store_word, store_ins, store_opn, 
+        jump_flag, data_req, data_reqAddr, bytes_decoded_this_cycle,
+        store_writebackFlag, callqFlag, rflags_seq, idmem
+        );
 
-mod_memstage mem (
-        // INPUT PARAMS
-        can_memstage, memstage_active, load_done, load_buffer, idmem, store_memstage_active,
-        store_ins, store_opn,
-        //OUTPUT PARAMS
-        enable_execute, loadbuffer_done, data_reqFlag, store_reqFlag, rip_memex, regA_contents_memex,
-        regB_contents_memex, imm_contents_memex, opcode_contents_memex,
-        rmByte_contents_memex, regByte_contents_memex, dependency_memex, sim_end_signal_memex
-    );
-
-mod_execute ex (
-        // INPUT PARAMS
-        can_execute, memex, load_buffer, store_memstage_active, 
-        regfile, opcode_group, rflags_seq,
-        //OUTPUT PARAMS
-        enable_writeback, jump_flag, jump_cond_flag, rflags, rip_exwb, dep_exwb,
-        sim_end_signal_exwb, alu_result_exwb, alu_ext_result_exwb,
-        regByte_contents_exwb, rmByte_contents_exwb, opcode_exwb
-    );
-
-mod_writeback rb (
-        // INPUT PARAMS
-        can_writeback, exwb, store_memstage_active,
-        // OUTPUT PARAMS
-        regfile, dep_exwb, store_writebackFlag
-    );
-    
 always @ (posedge bus.clk) begin
     //can_decode <= 1;
     if (bus.reset) begin
@@ -629,100 +557,6 @@ always @ (posedge bus.clk) begin
                 //decode_offset <= 0;
                 //fetch_offset <= 0;
             end
-        end
-
-        //if (store_complete) begin
-        //    store_done <= 0;
-        //end
-
-        // Set all the flags right here
-        rflags_seq.zf <= rflags.zf;
-
-        if (jump_cond_flag)
-            jump_cond_signal <= 1;
-        else
-            jump_cond_signal <= 0;
-
-        // Decoder is detecting a dependency
-        if (dependency == 1) begin
-            //while(1);
-            //$write("BOOM BOOM. Ins = %s",opcode_char[opcode_contents]);
-            score_board[rmByte_contents] <= 1;
-        end
-        else if (dependency == 2) begin
-            //$write("BOOM BOOM %s %s\n",reg_table_64[rmByte_contents], reg_table_64[regByte_contents]);
-            score_board[rmByte_contents] <= 1;
-            score_board[regByte_contents] <= 1;
-        end
-
-        if (!data_reqFlag && !store_reqFlag )
-            can_memstage <= 0;
-        if (store_opn == 0 && store_writeback)
-            store_memstage_active <= 0;
-        if (enable_memstage) begin
-            /*
-             * Giving to the pipeline register of Memory Stage
-             */
-            idmem.pc_contents <= rip;
-            idmem.data_regA <= regA_contents;
-            idmem.data_regB <= regB_contents;
-            idmem.data_imm <= imm_contents;
-            idmem.ctl_opcode <= opcode_contents;
-            idmem.ctl_rmByte <= rmByte_contents;
-            idmem.ctl_regByte <= regByte_contents;
-            idmem.ctl_dep <= dependency;
-            idmem.sim_end <= sim_end_signal;
-            can_memstage <= 1;
-            if (data_reqFlag) begin
-                data_req <= 1;
-                memstage_active <= 1;
-            end
-            if (store_reqFlag) begin
-                store_opn <= 1;
-                data_req <= 1;
-                store_memstage_active <= 1;
-            end
-        end
-
-        can_execute <= 0;
-        if (enable_execute) begin
-            /*
-             * Giving to the pipeline register of ALU
-             */
-            memex.pc_contents <= rip_memex;
-            memex.data_regA <= regA_contents_memex;
-            memex.data_regB <= regB_contents_memex;
-            memex.data_imm <= imm_contents_memex;
-            memex.ctl_opcode <= opcode_contents_memex;
-            memex.ctl_rmByte <= rmByte_contents_memex;
-            memex.ctl_regByte <= regByte_contents_memex;
-            memex.ctl_dep <= dependency_memex;
-            memex.sim_end <= sim_end_signal_memex;
-            if (loadbuffer_done) begin
-                load_done <= 0;
-                memstage_active <= 0;
-            end
-            can_execute <= 1;
-        end
-
-        can_writeback <= 0;
-        if (enable_writeback) begin
-            /*
-            * Giving to the write back stage of the processor
-            */
-            exwb.pc_contents <= rip_exwb;
-            exwb.alu_result <= alu_result_exwb;
-            exwb.alu_ext_result <= alu_ext_result_exwb;
-            exwb.ctl_rmByte <= rmByte_contents_exwb;
-            exwb.ctl_regByte <= regByte_contents_exwb;
-            exwb.sim_end <= sim_end_signal_exwb; 
-            exwb.ctl_opcode <= opcode_exwb;
-            //$write("rmByte %0h regByte %0h dep EXWB %0h",rmByte_contents_exwb, regByte_contents_exwb, dep_exwb);
-            score_board[rmByte_contents_exwb] <= 0;
-            if (dep_exwb == 2) begin
-                score_board[regByte_contents_exwb] <= 0;
-            end
-            can_writeback <= 1;
         end
     end
 end

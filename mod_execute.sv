@@ -6,6 +6,48 @@
  *     The SF indicates the sign of the signed result
  */
 
+
+
+module mod_execute (    
+    /* verilator lint_off UNUSED */
+    /* verilator lint_off UNDRIVEN */
+    input enable_execute,
+    input loadbuffer_done,
+    input [0:8*8-1] load_buffer,
+    input store_memstage_active,
+    input [0:255][0:0][0:3] opcode_group,
+    input flags_reg rflags_seq,
+    
+    output memstage_active,
+    output load_done,
+    output can_execute,
+    output can_writeback,
+    output store_writebackFlag,
+    output jump_flag,
+    output jump_cond_flag,
+    output flags_reg rflags,
+    output [0:63] regfile[0:16-1],
+    output score_board[0:16-1],
+    output MEM_EX memex,
+    output EX_WB exwb
+);
+
+typedef struct packed {
+    logic [12:63] unused;
+    logic of; // Overflow flag
+    logic df; // Direction flag
+    logic If; // Interrupt flag. Not the capital case for I
+    logic tf; // trap flag
+    logic sf; // sign flag
+    logic zf; // zero flag
+    logic res_3; // reserved bit. Should be set to 0
+    logic af; // adjust flag
+    logic res_2; // reserved bit. should be set to 0
+    logic pf; // Parity flag
+    logic res_1; // reserved bit. should be set to 1
+    logic cf; // Carry flag
+} flags_reg;
+
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
 import "DPI-C" function longint syscall_cse502(input longint rax, input longint rdi, input longint rsi, input longint rdx, input longint r10, input longint r8, input longint r9);
 
@@ -25,52 +67,37 @@ typedef struct packed {
     logic sim_end;
 } MEM_EX;
 
+// Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
 typedef struct packed {
-    logic [12:63] unused;
-    logic of; // Overflow flag
-    logic df; // Direction flag
-    logic If; // Interrupt flag. Not the capital case for I
-    logic tf; // trap flag
-    logic sf; // sign flag
-    logic zf; // zero flag
-    logic res_3; // reserved bit. Should be set to 0
-    logic af; // adjust flag
-    logic res_2; // reserved bit. should be set to 0
-    logic pf; // Parity flag
-    logic res_1; // reserved bit. should be set to 1
-    logic cf; // Carry flag
-} flags_reg;
+    // PC + 1
+    logic [0:63] pc_contents;
+    // ALU Result
+    logic [0:63] alu_result;
+    logic [0:63] alu_ext_result;
+    // Control signals
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic sim_end;
+} EX_WB;
 
-module mod_execute (    
-    /* verilator lint_off UNUSED */
-    /* verilator lint_off UNDRIVEN */
-    input can_execute,
-    input MEM_EX memex,
-    input [0:8*8-1] load_buffer,
-    input store_memstage_active,
-    input [0:63] regfile[0:16-1],
-    input [0:255][0:0][0:3] opcode_group,
-    input flags_reg rflags_seq,
-
-    output enable_writeback,
-    output jump_flag,
-    output jump_cond_flag,
-    output flags_reg rflags,
-    output [0:63] rip_exwb,
-    output [0:1] dep_exwb,
-    output sim_end_signal_exwb,
-    output [0 : 63] alu_result_exwb,
-    output [0 : 63] alu_ext_result_exwb,
-    output [0 : 4-1] regByte_contents_exwb,
-    output [0 : 4-1] rmByte_contents_exwb,
-    output [0 : 8-1] opcode_exwb
-);
+// Temporary values to be given to the EXWB pipeline register
+logic [0:63] rip_exwb;
+logic [0:1]  dep_exwb;
+logic sim_end_signal_exwb;
+logic[0 : 63] alu_result_exwb;
+logic[0 : 63] alu_ext_result_exwb;
+logic[0 : 4-1] regByte_contents_exwb;
+logic[0 : 4-1] rmByte_contents_exwb;
+logic[0 : 8-1] opcode_exwb;
 
 logic[0 : 127] data_regAA;
 logic[0 : 127] data_regBB;
 logic[0 : 64] ext_addReg;
 logic[0 : 16*8-1] temp16;
 logic[0 : 63] i;
+
+logic enable_writeback;
 
 always_comb begin
     if (can_execute) begin : execute_block
@@ -237,6 +264,44 @@ always_comb begin
     end
     else
         enable_writeback = 0;
+end
+
+mod_writeback rb (
+        // INPUT PARAMS
+        can_writeback, exwb, store_memstage_active,
+        // OUTPUT PARAMS
+        regfile, dep_exwb, store_writebackFlag
+    );
+
+always @ (posedge bus.clk) begin
+
+    if (bus.reset) begin
+        //if (store_complete) begin
+        //    store_done <= 0;
+        //end
+    end else begin // !bus.reset
+        
+        can_writeback <= 0;
+        if (enable_writeback) begin
+            /*
+            * Giving to the write back stage of the processor
+            */
+            exwb.pc_contents <= rip_exwb;
+            exwb.alu_result <= alu_result_exwb;
+            exwb.alu_ext_result <= alu_ext_result_exwb;
+            exwb.ctl_rmByte <= rmByte_contents_exwb;
+            exwb.ctl_regByte <= regByte_contents_exwb;
+            exwb.sim_end <= sim_end_signal_exwb; 
+            exwb.ctl_opcode <= opcode_exwb;
+            //$write("rmByte %0h regByte %0h dep EXWB %0h",rmByte_contents_exwb, regByte_contents_exwb, dep_exwb);
+            score_board[rmByte_contents_exwb] <= 0;
+            if (dep_exwb == 2) begin
+                score_board[regByte_contents_exwb] <= 0;
+            end
+            can_writeback <= 1;
+        end
+
+    end
 end
 
 endmodule

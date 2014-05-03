@@ -1,3 +1,14 @@
+
+module mod_writeback (
+    input can_writeback,
+    /* verilator lint_off UNUSED */
+    input EX_WB exwb,
+    input store_memstage_active,
+    output [0:63] regfile[0:16-1],
+    output [0:1]  dep_exwb,
+    output store_writebackFlag
+);
+
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
 typedef struct packed {
     // PC + 1
@@ -11,16 +22,6 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic sim_end;
 } EX_WB;
-
-module mod_writeback (
-    input can_writeback,
-    /* verilator lint_off UNUSED */
-    input EX_WB exwb,
-    input store_memstage_active,
-    output [0:63] regfile[0:16-1],
-    output [0:1]  dep_exwb,
-    output store_writebackFlag
-);
 
 always_comb begin
     if (can_writeback) begin : writeback_block
