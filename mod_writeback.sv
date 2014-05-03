@@ -36,7 +36,7 @@ always_comb begin
 
         else if (exwb.ctl_opcode == 195) begin
             // RETQ
-            $write("Write for retq");
+            //$write("Write for retq");
             regfile[4] = regfile[4] + 8;
         end
 
@@ -51,10 +51,10 @@ always_comb begin
             end
             else begin
                 // PUSH
-              $write("PUSH");
+              //$write("PUSH");
               regfile[4] = regfile[4] - 8;
               store_writebackFlag = 1;
-              $finish;
+              //$finish;
             end
         end
 

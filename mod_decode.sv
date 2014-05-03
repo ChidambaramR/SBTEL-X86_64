@@ -927,6 +927,20 @@ always_comb begin
                                   signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
                                   reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
                                     {"("}, {reg_table_64[rmByte]}, {")"}};
+                                  if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                      store_reqFlag = 1;
+                                      regByte_contents = regByte;
+                                      rmByte_contents = rmByte;
+                                      data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                                      store_word = regfile[regByte];
+                                      store_ins = 1;
+                                      dependency = 2;
+                                  end
+                                  else begin
+                                      offset = 0;
+                                      can_decode = 0;
+                                      enable_memstage = 0;
+                                  end
                             end
 
                             else begin
@@ -1022,6 +1036,18 @@ always_comb begin
                                 signed_disp_byte = {{32{1'b1}}, {byte_swap(disp_byte)}};
                                 reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
                                      {"), "}, {reg_table_64[regByte]}};
+                                if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                    data_reqFlag = 1;
+                                    data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                                    regByte_contents = regByte;
+                                    rmByte_contents = rmByte;
+                                    dependency = 2;                                    
+                                end
+                                else begin
+                                    offset = 0;
+                                    can_decode = 0;
+                                    enable_memstage = 0;
+                                end
                             end
                             else begin
                                 //$write("found you");
