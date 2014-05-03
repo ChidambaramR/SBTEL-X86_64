@@ -729,6 +729,7 @@ always_comb begin
                      * Now it appears to the program that only one byte opcode occured.
                      */
                     opcode = decode_bytes[offset*8 +: 1*8];
+                    opcode_contents = opcode;
                     space_buffer[(offset)*8 +: 8] = opcode;
                     offset += 1;
 
@@ -736,7 +737,19 @@ always_comb begin
 
                     // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
                     if (opcode == 5) begin        // 0F 05 (syscall)
-                        opcode_enc_byte = "XXX";
+                        if (score_board[0] == 0 && score_board[7] == 0 && score_board[6] == 0 
+                              && score_board[2] == 0 && score_board[10] == 0 && score_board[8] == 0
+                              && score_board[9] == 0) begin
+                            opcode_enc_byte = "XXX";
+                            rmByte_contents = 0; // RAX
+                            dependency = 1;
+                        end
+                        else begin
+                            offset = 0;
+                            can_decode = 0;
+                            enable_memstage = 0;
+                        end
+                        
                         //$finish;
                     end
                     else if (opcode == 175) // 0F AF (imul)
@@ -1233,7 +1246,7 @@ always_comb begin
                     jump_target = load_buffer;
                     //$write("load buffer = %x",load_buffer);
                     callqFlag = 0;
-                    $finish;
+                    //$finish;
                 end
                 else begin
                     callqFlag = 1;
