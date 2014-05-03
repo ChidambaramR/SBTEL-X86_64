@@ -21,6 +21,7 @@ logic store_writeback;
 logic store_writebackFlag;
 //logic store_ack_waiting;
 logic store_done;
+logic sending_data;
 logic store_opn;
 logic store_ack_received;
 
@@ -112,7 +113,7 @@ always_comb begin
     end else if (bus.reqack) begin
         send_fetch_req = 0; // hack: still idle, but already got ack (in theory, we could try to send another request as early as this)
     end else begin
-        if (!jump_signal)
+    if (!jump_signal && !store_ins && !data_req)
             send_fetch_req = (fetch_offset - decode_offset < 7'd32);
         //if (jump_signal && !bus.respcyc) begin
         //    jump_flag = 0;
@@ -155,6 +156,9 @@ always @ (posedge bus.clk) begin
          */
         if (store_writebackFlag)
             store_writeback <= 1;
+
+          if (store_opn == 0)
+            sending_data <= 0;
 
         if (!bus.respcyc) begin
 
@@ -385,6 +389,7 @@ always @ (posedge bus.clk) begin
                     //data_buffer[(data_offset)*8 +: 2*64] <= bus.resp;
                     //$write("Changed buffer = %x",data_buffer);
                     store_done <= 1;
+                    sending_data <= 1;
                     //store_writeback <= 0;
                     cycle <= 1;
                     data_offset <= 0;
@@ -432,9 +437,11 @@ always @ (posedge bus.clk) begin
                  * fetch state was not idle, we would not have sent a request at all. So we are making
                  * the sanity check. 
                  */
-                if (!store_done)
+                if (!store_done) begin
                     bus.reqcyc <= 0;
-                fetch_state <= fetch_waiting;
+                end
+                if (!sending_data)
+                    fetch_state <= fetch_waiting;
             end
         end
     end

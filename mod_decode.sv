@@ -1416,6 +1416,8 @@ always_comb begin
 
     end else begin
         enable_memstage = 0;
+        if(store_writebackFlag)
+            store_ins = 0;
         bytes_decoded_this_cycle = 0;
     end
 end

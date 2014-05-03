@@ -7,6 +7,7 @@
  */
 
 
+import "DPI-C" function longint syscall_cse502(input longint rax, input longint rdi, input longint rsi, input longint rdx, input longint r10, input longint r8, input longint r9);
 
 module mod_execute (    
     /* verilator lint_off UNUSED */
@@ -49,7 +50,6 @@ typedef struct packed {
 } flags_reg;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
-import "DPI-C" function longint syscall_cse502(input longint rax, input longint rdi, input longint rsi, input longint rdx, input longint r10, input longint r8, input longint r9);
 
 typedef struct packed {
     // PC + 1
@@ -173,6 +173,10 @@ always_comb begin
                 //regfile[memex.ctl_rmByte] = memex.data_imm & memex.data_regA;
                 alu_result_exwb = memex.data_imm & memex.data_regA;
                 //$display("data_imm = %0h data_regA = %0h result = %0h", memex.data_imm, memex.data_regA, (alu_result_exwb));
+            end
+            else if(memex.ctl_regByte == 5) begin
+                // SUB instruction
+              alu_result_exwb = memex.data_regA - memex.data_imm;
             end
             else if (memex.ctl_regByte == 1) begin
                 // OR Instruction
