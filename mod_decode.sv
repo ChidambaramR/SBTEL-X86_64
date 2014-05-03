@@ -1,44 +1,128 @@
+/*
+* Refer to wiki page of RFLAGS for the bit pattern
+*/ 
+typedef struct packed {
+    logic [12:63] unused;
+    logic of; // Overflow flag
+    logic df; // Direction flag
+    logic If; // Interrupt flag. Not the capital case for I
+    logic tf; // trap flag
+    logic sf; // sign flag
+    logic zf; // zero flag
+    logic res_3; // reserved bit. Should be set to 0
+    logic af; // adjust flag
+    logic res_2; // reserved bit. should be set to 0
+    logic pf; // Parity flag
+    logic res_1; // reserved bit. should be set to 1
+    logic cf; // Carry flag
+} flags_reg;
+
+// Refer to slide 11 of 43 in CSE502-L4-Pipilining.pdf
+typedef struct packed {
+    // PC + 1
+    logic [0:63] pc_contents;
+    // REGA Contents
+    logic [0:63] data_regA;
+    // REGB Contents
+    logic [0:63] data_regB;
+    // Control signals
+    logic [0:63] data_imm;
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic [0:1]  ctl_dep;
+    logic sim_end;
+} ID_MEM;
+
+// Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+typedef struct packed {
+    // PC + 1
+    logic [0:63] pc_contents;
+    // REGA Contents
+    logic [0:63] data_regA;
+    // REGB Contents
+    logic [0:63] data_regB;
+    // Control signals
+    logic [0:63] data_imm;
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic [0:1]  ctl_dep;
+    logic sim_end;
+} MEM_EX;
+
+// Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+typedef struct packed {
+    // PC + 1
+    logic [0:63] pc_contents;
+    // ALU Result
+    logic [0:63] alu_result;
+    logic [0:63] alu_ext_result;
+    // Control signals
+    logic [0:7]  ctl_opcode;
+    logic [0:3]  ctl_regByte;
+    logic [0:3]  ctl_rmByte;
+    logic sim_end;
+} EX_WB;
+
 module mod_decode (
-    input can_writeback,
-    input data_req,
-    input memstage_active,
-    input store_memstage_active,
     input jump_signal,
-    input jump_cond_signal,
     input [63:0] fetch_rip,
     input [6:0] fetch_offset, 
     input [6:0] decode_offset,
     input [0:15*8-1] decode_bytes,
     input [0:255][0:0][0:3] opcode_group,
-    input score_board[0:16-1],
-    input [0:63] regfile[0:16-1],
     input callq_stage2,
     input [0:8*8-1] load_buffer,
-
-    output [0:63] regA_contents,
-    output [0:63] regB_contents,
-    output [0:63] imm_contents,
-    output [0:7] opcode_contents,
-    output [0:4-1] rmByte_contents,   // 4 bit Register B INDEX for the ALU
-    output [0:4-1] regByte_contents,  // 4 bit Register A INDEX for the ALU
-    output [0:1] dependency,
-    output sim_end_signal,              // Variable to keep track of simulation ending
+    input store_writeback,
+    
+    output [0:63] regfile[0:16-1],
+    output flags_reg rflags, 
+    output load_done,
+    output MEM_EX memex,
+    output EX_WB exwb,
     output [0:63] rip,
     output [0:63] jump_target,
-    output loadbuffer_done,
     output [0:8*8-1] store_word,
     output store_ins,
-    output enable_memstage,
-    output store_reqFlag,
-    output data_reqFlag,
+    output store_opn,
     output jump_flag,
-    output jump_cond_flag,
+    output data_req,
     output [0:63] data_reqAddr,
     output [0:3] bytes_decoded_this_cycle,
     output store_writebackFlag,
-    output callqFlag
+    output callqFlag,
+    output flags_reg rflags_seq,
+    output ID_MEM idmem
 );
     
+
+// Temporary values which will be stored in the IDMEM pipeline register
+logic[0 : 63] regA_contents;
+logic[0 : 63] regB_contents;
+logic[0 : 63] imm_contents;
+logic[0 : 7] opcode_contents;
+logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
+logic[0 : 4-1] regByte_contents;    // 4 bit Register A INDEX for the ALU
+logic[0 :1] dependency;
+logic sim_end_signal;               // Variable to keep track of simulation ending
+
+logic can_memstage;
+logic can_writeback;
+logic enable_memstage;
+
+logic loadbuffer_done;
+logic score_board[0:16-1];
+logic memstage_active;
+logic store_memstage_active;
+logic data_reqFlag;
+logic store_reqFlag;
+
+logic jump_cond_signal;
+logic jump_cond_flag;
+
+/**************** DECODER Specific Stuff ******************/
+
 /*
  * This is the REX prefix
  */
@@ -1271,4 +1355,75 @@ always_comb begin
     end
 end
     
+mod_memstage mem (
+        // INPUT PARAMS
+        can_memstage, load_buffer, idmem, store_memstage_active, 
+        store_ins, store_opn, opcode_group, rflags_seq,
+        //OUTPUT PARAMS
+        can_writeback, loadbuffer_done, data_reqFlag, store_reqFlag, 
+        store_writebackFlag, jump_flag, jump_cond_flag, memstage_active, 
+        load_done, score_board, regfile, rflags, memex, exwb
+        );
+
+
+always @ (posedge bus.clk) begin
+
+    if (bus.reset) begin
+        //if (store_complete) begin
+        //    store_done <= 0;
+        //end
+    end else begin // !bus.reset
+     
+        // Set all the flags right here
+        rflags_seq.zf <= rflags.zf;
+
+        if (jump_cond_flag)
+            jump_cond_signal <= 1;
+        else
+            jump_cond_signal <= 0;
+
+        // Decoder is detecting a dependency
+        if (dependency == 1) begin
+            //while(1);
+            //$write("BOOM BOOM. Ins = %s",opcode_char[opcode_contents]);
+            score_board[rmByte_contents] <= 1;
+        end
+        else if (dependency == 2) begin
+            //$write("BOOM BOOM %s %s\n",reg_table_64[rmByte_contents], reg_table_64[regByte_contents]);
+            score_board[rmByte_contents] <= 1;
+            score_board[regByte_contents] <= 1;
+        end
+
+        if (!data_reqFlag && !store_reqFlag )
+            can_memstage <= 0;
+        if (store_opn == 0 && store_writeback)
+            store_memstage_active <= 0;
+        if (enable_memstage) begin
+            /*
+             * Giving to the pipeline register of Memory Stage
+             */
+            idmem.pc_contents <= rip;
+            idmem.data_regA <= regA_contents;
+            idmem.data_regB <= regB_contents;
+            idmem.data_imm <= imm_contents;
+            idmem.ctl_opcode <= opcode_contents;
+            idmem.ctl_rmByte <= rmByte_contents;
+            idmem.ctl_regByte <= regByte_contents;
+            idmem.ctl_dep <= dependency;
+            idmem.sim_end <= sim_end_signal;
+            can_memstage <= 1;
+            if (data_reqFlag) begin
+                data_req <= 1;
+                memstage_active <= 1;
+            end
+            if (store_reqFlag) begin
+                store_opn <= 1;
+                data_req <= 1;
+                store_memstage_active <= 1;
+            end
+        end
+        
+    end
+end
+
 endmodule
