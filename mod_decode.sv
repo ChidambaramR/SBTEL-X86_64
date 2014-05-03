@@ -729,6 +729,7 @@ always_comb begin
                      * Now it appears to the program that only one byte opcode occured.
                      */
                     opcode = decode_bytes[offset*8 +: 1*8];
+                    opcode_contents = opcode;
                     space_buffer[(offset)*8 +: 8] = opcode;
                     offset += 1;
 
@@ -736,7 +737,19 @@ always_comb begin
 
                     // All the 2 byte Opcodes except "0F 05/AF" have a 4 byte displacement
                     if (opcode == 5) begin        // 0F 05 (syscall)
-                        opcode_enc_byte = "XXX";
+                        if (score_board[0] == 0 && score_board[7] == 0 && score_board[6] == 0 
+                              && score_board[2] == 0 && score_board[10] == 0 && score_board[8] == 0
+                              && score_board[9] == 0) begin
+                            opcode_enc_byte = "XXX";
+                            rmByte_contents = 0; // RAX
+                            dependency = 1;
+                        end
+                        else begin
+                            offset = 0;
+                            can_decode = 0;
+                            enable_memstage = 0;
+                        end
+                        
                         //$finish;
                     end
                     else if (opcode == 175) // 0F AF (imul)
@@ -928,12 +941,12 @@ always_comb begin
                                       store_word = regfile[regByte];
                                       store_ins = 1;
                                       dependency = 2;
-                                  end
-                                  else begin
+                               end
+                               else begin
                                       offset = 0;
                                       can_decode = 0;
                                       enable_memstage = 0;
-                                  end
+                               end
                             end
                         end
 
@@ -945,6 +958,20 @@ always_comb begin
                         signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
                         reg_buffer[0:247] = {{reg_table_64[regByte]}, {", $0x"}, {byte8_to_str(signed_disp_byte)},
                                         {"("}, {reg_table_64[rmByte]}, {")"}};
+                        if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                            store_reqFlag = 1;
+                            regByte_contents = regByte;
+                            rmByte_contents = rmByte;
+                            data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                            store_word = regfile[regByte];
+                            store_ins = 1;
+                            dependency = 2;
+                        end
+                        else begin
+                            offset = 0;
+                            can_decode = 0;
+                            enable_memstage = 0;
+                        end
                     end
                     else begin
                         /*
@@ -1022,6 +1049,18 @@ always_comb begin
                         signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
                         reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
                                         {"), "}, {reg_table_64[regByte]}};
+                        if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                data_reqFlag = 1;
+                                data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                dependency = 2;
+                        end
+                        else begin
+                                offset = 0;
+                                can_decode = 0;
+                                enable_memstage = 0;
+                        end
                     end
                     else begin
                         /*
@@ -1205,9 +1244,9 @@ always_comb begin
                     enable_memstage = 0;
                     jump_flag = 1; // Unconditional jump
                     jump_target = load_buffer;
-                    $write("load buffer = %x",load_buffer);
+                    //$write("load buffer = %x",load_buffer);
                     callqFlag = 0;
-                    $finish;
+                    //$finish;
                 end
                 else begin
                     callqFlag = 1;
@@ -1215,7 +1254,7 @@ always_comb begin
                     rmByte = 4;
                     regByte_contents = regByte;
                     rmByte_contents = rmByte;
-                    $write("caught for retq RSP = %x", regfile[4]);
+                    //$write("caught for retq RSP = %x", regfile[4]);
                     dependency = 1;
                     data_reqFlag = 1;
                     data_reqAddr = regfile[regByte]; 

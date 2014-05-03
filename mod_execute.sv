@@ -7,6 +7,8 @@
  */
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
+import "DPI-C" function longint syscall_cse502(input longint rax, input longint rdi, input longint rsi, input longint rdx, input longint r10, input longint r8, input longint r9);
+
 typedef struct packed {
     // PC + 1
     logic [0:63] pc_contents;
@@ -98,6 +100,13 @@ always_comb begin
 
         else if ((memex.ctl_opcode >= 80) && (memex.ctl_opcode < 88)) begin
             // PUSH 
+        end
+
+        else if (memex.ctl_opcode == 5) begin
+            $write("syscall finish in exec %x", regfile[0]);
+            syscall_cse502(regfile[0], regfile[7], regfile[6], regfile[2], regfile[10], regfile[8], regfile[9]);
+            $write("syscall finish in exec Finish %x", regfile[0]);
+            //$finish;
         end
 
         else if ((memex.ctl_opcode >= 88) && (memex.ctl_opcode < 96)) begin
@@ -216,7 +225,7 @@ always_comb begin
         end
         //$display("PC  = %0h, regA = %0h, regB = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
         rip_exwb = memex.pc_contents;
-        if (memex.ctl_opcode != 125 && memex.ctl_opcode != 116 ) begin
+        if (memex.ctl_opcode != 125 && memex.ctl_opcode != 116 /*&& memex.ctl_opcode != 195*/) begin
             /*
              * We dont want the write back stage for conditional jumps.
              * We just want the ALU to execute and set the flags for resteering the fetch
