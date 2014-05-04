@@ -127,7 +127,7 @@ always_comb begin
              * For store instruction we dont have to worry about further pipeline stages
              */
             if (!store_ins) begin
-                if (load_done) begin
+            if (load_done) begin
                   //$write("load byte = %x",load_buffer);
                   rmByte_contents_memex  = idmem.ctl_rmByte;
                   regByte_contents_memex = idmem.ctl_regByte;
@@ -197,7 +197,7 @@ always @ (posedge bus.clk) begin
             memex.ctl_dep <= dependency_memex;
             memex.sim_end <= sim_end_signal_memex;
             if (loadbuffer_done) begin
-                load_done <= 0;
+                //load_done <= 0;
                 memstage_active <= 0;
             end
             can_execute <= 1;

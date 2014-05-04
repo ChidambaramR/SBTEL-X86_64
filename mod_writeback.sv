@@ -41,6 +41,11 @@ always_comb begin
             regfile[4] = regfile[4] + 8;
         end
 
+        else if(exwb.ctl_opcode == 193) begin
+            regfile[exwb.ctl_rmByte] = exwb.alu_result;
+            //$write("shl into %x",exwb.ctl_rmByte);
+        end
+
         else if ((exwb.ctl_opcode >= 80) && (exwb.ctl_opcode <= 95)) begin
             // PUSH / POP instruction
             if(exwb.ctl_opcode >= 88) begin
@@ -66,7 +71,12 @@ always_comb begin
         end
         else if (exwb.ctl_opcode == 139) begin
             // LOAD INS
+          //$write("LD %x into %x",exwb.alu_result, exwb.ctl_regByte);
             regfile[exwb.ctl_regByte] = exwb.alu_result;
+        end
+        else if ((exwb.ctl_opcode >= 184) && (exwb.ctl_opcode <= 191)) begin
+             regfile[exwb.ctl_rmByte] = exwb.alu_result;
+             //$write("special move %x into %x",exwb.alu_result, exwb.ctl_rmByte);
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;

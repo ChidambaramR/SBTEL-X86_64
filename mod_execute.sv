@@ -130,9 +130,9 @@ always_comb begin
         end
 
         else if (memex.ctl_opcode == 5) begin
-            $write("syscall finish in exec %x", regfile[0]);
+            //$write("syscall finish in exec %x", regfile[0]);
             syscall_cse502(regfile[0], regfile[7], regfile[6], regfile[2], regfile[10], regfile[8], regfile[9]);
-            $write("syscall finish in exec Finish %x", regfile[0]);
+            //$write("syscall finish in exec Finish %x", regfile[0]);
             //$finish;
         end
 
@@ -253,6 +253,7 @@ always_comb begin
                     alu_result_exwb = alu_result_exwb / 2;
                 end
             end
+            //$write("alu result = %x rm = %x",alu_result_exwb, rmByte_contents_exwb);
         end
         //$display("PC  = %0h, regA = %0h, regB = %0h, imm = %0h , opcode = %0h, ctl_regByte = %0h, ctl_rmByte = %0h",memex.pc_contents, memex.data_regA, memex.data_regB, memex.data_imm, memex.ctl_opcode, memex.ctl_regByte, memex.ctl_rmByte);
         rip_exwb = memex.pc_contents;

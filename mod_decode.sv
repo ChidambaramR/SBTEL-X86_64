@@ -560,7 +560,7 @@ wire can_decode = (fetch_offset - decode_offset >= 7'd15);
 always_comb begin
     dependency = 0;
 
-    if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 )
+    if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 || load_done == 1)
         can_decode = 0;
 
     if (can_decode) begin : decode_block
@@ -679,7 +679,8 @@ always_comb begin
                 reg_buffer[0:31] = reg_table_64[opcode];
                 
                 regByte = 4;
-                rmByte = opcode[0:3];
+                rmByte = opcode;
+                //$write("copde = %x rmByte = %x",opcode, rmByte);
                 regByte_contents = regByte;
                 rmByte_contents = rmByte;
 
@@ -704,6 +705,7 @@ always_comb begin
                         regByte = 4;
                         data_reqAddr = regfile[regByte] - 8; // RSP - 8
                         store_word = regfile[rmByte];
+                        //$write("sotre word = %x, rm = %x",store_word, rmByte);
                         //$write("decode PUSH");
                         //$finish;
                     end
@@ -738,6 +740,7 @@ always_comb begin
                     imm_contents = {{byte_swap(low_byte)}, {byte_swap(high_byte)}};
                     opcode = opcode - 184;
                     rmByte_contents = opcode[4:7];
+                    rmByte = opcode[4:7];
                     //$write("In decode %x",rmByte_contents);
                     //$write("opcode = %s rm %0h",reg_table_64[rmByte_contents], rmByte_contents);
                     regByte_contents = 0;
@@ -774,6 +777,7 @@ always_comb begin
 
                 rmByte = {{rex_prefix.B}, {modRM_byte.rm}};
                 opcode_enc_byte = opcode_enc[opcode];
+                //$write("opcode = %x opcode_enc_byte = %x",opcode, opcode_enc_byte);
 
                 if (opcode_enc_byte == "MI ") begin
                     imm_byte[0:7] = decode_bytes[offset*8 +: 1*8]; 
@@ -784,10 +788,16 @@ always_comb begin
                         //$write("Inside MI");
                         //regByte_contents = regByte;
                         rmByte_contents = rmByte;
+                //$write("rmByte = %x",rmByte);
                         regA_contents = regfile[rmByte];
                         regB_contents = {{61{1'b0}}, {modRM_byte.reg1}};
                         imm_contents = {{56{1'b0}}, {imm_byte[0:7]}};
                         dependency = 1;
+                    end
+                    else begin
+                        offset = 0;
+                        can_decode = 0;
+                        enable_memstage = 0;
                     end
                 end
                 /* No Test Case for mod encode = M1 or MC */
@@ -1061,6 +1071,7 @@ always_comb begin
                             regByte_contents = regByte;
                             rmByte_contents = rmByte;
                             data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                            //$write("data req addr = %x rmbyte = %x",regfile[rmByte], rmByte);
                             store_word = regfile[regByte];
                             store_ins = 1;
                             dependency = 2;
@@ -1164,6 +1175,7 @@ always_comb begin
                                 data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
                                 regByte_contents = regByte;
                                 rmByte_contents = rmByte;
+                                //$write("here opcode = %x, dataa = %x, regb = %x, rmb = %x",opcode, data_reqAddr, regByte_contents, rmByte);
                                 dependency = 2;
                         end
                         else begin
@@ -1318,7 +1330,7 @@ always_comb begin
                                 regByte_contents = 4;
                                 rmByte_contents = 4;
                                 data_reqAddr = regfile[regByte] - 8;
-                                store_word = temp_crr;
+                                store_word = rip + 4 + 1;
                                 //$write("caught for callq RSP = %x word = %x", data_reqAddr, store_word);
                                 // can_decode = 0;
                                 dependency = 1;
@@ -1333,10 +1345,17 @@ always_comb begin
                     end
                     else begin
                         // Conditional jump
+                    if (opcode == 233) begin
+                        bytes_decoded_this_cycle = 0;
+                        enable_memstage = 0;
+                        jump_target = temp_crr; 
+                        jump_flag = 1; // Unconditional jump
+                      end else begin
                         bytes_decoded_this_cycle = 0;
                         jump_target = temp_crr;
                         enable_memstage = 0;
                         jump_cond_flag = 1;
+                    end
                     end
                 end
             end

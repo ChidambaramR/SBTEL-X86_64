@@ -312,43 +312,11 @@ always @ (posedge bus.clk) begin
              * We received a response for data request
              */
             outstanding_fetch_req <= 0;
-            data_req <= 0;
+            if(!load_done)
+              data_req <= 0;
             //$write("got response for my data req. Yayy");
             fetch_state <= fetch_active;
             if (!store_ins) begin
-                // We are here for a LOAD instruction
-                /*
-                if ((fetch_data_skip) > 0) begin
-                    // Fetch skip is up only when there is a response for the first time. 
-                    fetch_data_skip <= fetch_data_skip - 8;
-                end else begin
-                    if (!load_done) begin
-                        load_buffer <= 64'b0;
-                        if (internal_data_offset == 0)
-                            load_buffer[56:63] <= bus.resp[63:56];
-                        else if (internal_data_offset == 1)
-                            load_buffer[56:63] <= bus.resp[55:48];
-                        else if (internal_data_offset == 2)
-                            load_buffer[56:63] <= bus.resp[47:40];
-                        else if (internal_data_offset == 3)
-                            load_buffer[56:63] <= bus.resp[39:32];
-                        else if (internal_data_offset == 4)
-                            load_buffer[56:63] <= bus.resp[31:24];
-                        else if (internal_data_offset == 5)
-                            load_buffer[56:63] <= bus.resp[23:16];
-                        else if (internal_data_offset == 6)
-                            load_buffer[56:63] <= bus.resp[15:8];
-                        else if (internal_data_offset == 7)
-                            load_buffer[56:63] <= bus.resp[7:0];
-                        load_buffer <= bus.resp;
-                        //$display("orig resp %x",bus.resp);
-                        //$display("resp %x io = %x",bus.resp[55:0], internal_offset);
-                        //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
-                        internal_data_offset <= 0;
-                        load_done <= 1;
-                    end
-                end
-                */
                 if ((fetch_data_skip) > 0) begin
                     // Fetch skip is up only when there is a response for the first time. 
                     fetch_data_skip <= fetch_data_skip - 8;
@@ -402,6 +370,7 @@ always @ (posedge bus.clk) begin
             // Handling the jump signal when no response in the bus
             //if (!jump_flag)
             //    jump_signal <= 0;
+            load_done <= 0;
             if (jump_flag) begin
                 /*
                  * A jump is found and we need to resteer the fetch
