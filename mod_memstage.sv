@@ -37,6 +37,9 @@ typedef struct packed {
     logic tf; // trap flag
     logic sf; // sign flag
     logic zf; // zero flag
+    logic jge;
+    //logic jne; 
+    logic jg;
     logic res_3; // reserved bit. Should be set to 0
     logic af; // adjust flag
     logic res_2; // reserved bit. should be set to 0
@@ -56,6 +59,7 @@ typedef struct packed {
     // Control signals
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
@@ -73,6 +77,7 @@ typedef struct packed {
     // Control signals
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
@@ -88,6 +93,7 @@ typedef struct packed {
     logic [0:63] alu_ext_result;
     // Control signals
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
@@ -99,6 +105,7 @@ logic [0:63] regA_contents_memex;
 logic [0:63] regB_contents_memex;
 logic [0:63] imm_contents_memex;
 logic [0:7] opcode_contents_memex;
+logic       twob_opcode_contents_memex;
 logic [0:4-1] rmByte_contents_memex;     // 4 bit Register B INDEX for the ALU
 logic [0:4-1] regByte_contents_memex;    // 4 bit Register A INDEX for the ALU
 logic [0:1] dependency_memex;
@@ -119,6 +126,7 @@ always_comb begin
             regByte_contents_memex = idmem.ctl_regByte;
             dependency_memex       = idmem.ctl_dep;
             sim_end_signal_memex   = idmem.sim_end;
+            twob_opcode_contents_memex = idmem.twob_opcode;
             enable_execute = 1;
         end
         else begin
@@ -133,6 +141,7 @@ always_comb begin
                   regByte_contents_memex = idmem.ctl_regByte;
                   opcode_contents_memex  = idmem.ctl_opcode;
                   dependency_memex       = idmem.ctl_dep;
+                  twob_opcode_contents_memex = idmem.twob_opcode;
                   loadbuffer_done = 1;
                   enable_execute = 1;
                   data_reqFlag = 0;
@@ -147,6 +156,7 @@ always_comb begin
               // This is a STORE instruction
                 if (store_opn == 0) begin
                     rmByte_contents_memex  = idmem.ctl_rmByte;
+                    twob_opcode_contents_memex = idmem.twob_opcode;
                     regByte_contents_memex = idmem.ctl_regByte;
                     opcode_contents_memex  = idmem.ctl_opcode;
                     dependency_memex       = idmem.ctl_dep;
@@ -192,6 +202,7 @@ always @ (posedge bus.clk) begin
             memex.data_regB <= regB_contents_memex;
             memex.data_imm <= imm_contents_memex;
             memex.ctl_opcode <= opcode_contents_memex;
+            memex.twob_opcode <= twob_opcode_contents_memex;
             memex.ctl_rmByte <= rmByte_contents_memex;
             memex.ctl_regByte <= regByte_contents_memex;
             memex.ctl_dep <= dependency_memex;

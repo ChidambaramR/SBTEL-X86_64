@@ -63,7 +63,8 @@ initial begin
         regfile[j[1:4]] = {64{1'b0}};
     end
 
-    regfile[4] = 31744;
+    regfile[4] = 31752;  // WARNING. Change it to 0x7C00 after Varun's fix
+    regfile[6] = 1;
     callqFlag = 0;
 
     store_ack_received = 0;
@@ -430,6 +431,7 @@ typedef struct packed {
     logic tf; // trap flag
     logic sf; // sign flag
     logic zf; // zero flag
+    logic jge; // Flag for jump greater than equal to
     logic res_3; // reserved bit. Should be set to 0
     logic af; // adjust flag
     logic res_2; // reserved bit. should be set to 0
@@ -534,6 +536,9 @@ always @ (posedge bus.clk) begin
                 //fetch_offset <= 0;
             end
         end
+//        $display("\n\n");
+//        disp_reg_file();
+//        $display("\n\n");
     end
 end
 

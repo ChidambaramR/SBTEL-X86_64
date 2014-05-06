@@ -18,6 +18,7 @@ typedef struct packed {
     logic [0:63] alu_ext_result;
     // Control signals
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
@@ -30,6 +31,12 @@ always_comb begin
             regfile[2] = exwb.alu_ext_result;
         end
 
+        else if(exwb.ctl_opcode == 5) begin
+            regfile[0] = exwb.alu_result;
+//            $write("writing %x syscall",exwb.alu_result);
+//            $finish;
+        end
+
         else if (exwb.ctl_opcode == 255 || exwb.ctl_opcode == 232) begin
             regfile[4] = regfile[4] - 8;
             store_writebackFlag = 1;
@@ -39,6 +46,10 @@ always_comb begin
             // RETQ
             //$write("Write for retq");
             regfile[4] = regfile[4] + 8;
+        end
+
+        else if(exwb.twob_opcode == 1) begin
+            // Do nothing when a branch is not taken
         end
 
         else if(exwb.ctl_opcode == 193) begin
@@ -69,7 +80,7 @@ always_comb begin
             // STORE INS
             store_writebackFlag = 1;
         end
-        else if (exwb.ctl_opcode == 139) begin
+        else if (exwb.ctl_opcode == 139 || (exwb.ctl_opcode == 141 && !exwb.twob_opcode)) begin
             // LOAD INS
           //$write("LD %x into %x",exwb.alu_result, exwb.ctl_regByte);
             regfile[exwb.ctl_regByte] = exwb.alu_result;
@@ -80,7 +91,7 @@ always_comb begin
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;
-            //$write("Writing %0h into %0h",exwb.alu_result, exwb.ctl_rmByte);
+           // $write("Writing %0h into %0h",exwb.alu_result, exwb.ctl_rmByte);
         end
         dep_exwb = 0;
         //$display("Issuing writeback");

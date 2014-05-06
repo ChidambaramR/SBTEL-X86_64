@@ -9,6 +9,9 @@ typedef struct packed {
     logic tf; // trap flag
     logic sf; // sign flag
     logic zf; // zero flag
+    logic jge;
+    //logic jne;
+    logic jg;
     logic res_3; // reserved bit. Should be set to 0
     logic af; // adjust flag
     logic res_2; // reserved bit. should be set to 0
@@ -28,6 +31,7 @@ typedef struct packed {
     // Control signals
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode;
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
@@ -45,6 +49,7 @@ typedef struct packed {
     // Control signals
     logic [0:63] data_imm;
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
@@ -60,6 +65,7 @@ typedef struct packed {
     logic [0:63] alu_ext_result;
     // Control signals
     logic [0:7]  ctl_opcode;
+    logic        twob_opcode; 
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
@@ -97,11 +103,31 @@ module mod_decode (
 );
     
 
+function void disp_reg_file();
+    $display("RAX = %x", regfile[0]);
+    $display("RBX = %x", regfile[3]);
+    $display("RCX = %x", regfile[1]);
+    $display("RDX = %0h", regfile[2]);
+    $display("RSI = %0h", regfile[6]);
+    $display("RDI = %0h", regfile[7]);
+    $display("RBP = %0h", regfile[5]);
+    $display("RSP = %0h", regfile[4]);
+    $display("R8 = %0h", regfile[8]);
+    $display("R9 = %0h", regfile[9]);
+    $display("R10 = %0h", regfile[10]);
+    $display("R11 = %0h", regfile[11]);
+    $display("R12 = %0h", regfile[12]);
+    $display("R13 = %0h", regfile[13]);
+    $display("R14 = %0h", regfile[14]);
+    $display("R15 = %0h", regfile[15]);
+endfunction
+
 // Temporary values which will be stored in the IDMEM pipeline register
 logic[0 : 63] regA_contents;
 logic[0 : 63] regB_contents;
 logic[0 : 63] imm_contents;
 logic[0 : 7] opcode_contents;
+logic         twob_opcode_contents;
 logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
 logic[0 : 4-1] regByte_contents;    // 4 bit Register A INDEX for the ALU
 logic[0 :1] dependency;
@@ -574,6 +600,7 @@ always_comb begin
         low_byte = 0;
         rex_prefix = 0;
         prefix = 0;
+        twob_opcode_contents = 0;
         //callq_stage2 = 0;
         jump_target = 0;
         loadbuffer_done = 0;
@@ -582,6 +609,7 @@ always_comb begin
         store_word = 0;
         store_ins = 0;
         store_writebackFlag = 0;
+      
 
         for (i = 0; i < 32 ; i++) begin
             reg_buffer[i*8 +: 8] = " "; 
@@ -824,6 +852,7 @@ always_comb begin
                      */
                     opcode = decode_bytes[offset*8 +: 1*8];
                     opcode_contents = opcode;
+                    twob_opcode_contents = 1;
                     space_buffer[(offset)*8 +: 8] = opcode;
                     offset += 1;
 
@@ -1007,8 +1036,25 @@ always_comb begin
                          * It is NOT sign extended. The displacement value is 32 bits
                          */
                         if (rip_flag == 1) begin
+                            //$write("caught here");
+                            $finish;
                             reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                         {"%rip"}, {")"}};
+                            if ((score_board[regByte] == 0)) begin
+                                  store_reqFlag = 1;
+                                  regByte_contents = regByte;
+                                  rmByte_contents = regByte; // Dependency 1 means only rmByte will be score boarded. So HACK here.
+                                                            // since we need regByte to be score boarded and dependency = 1
+                                  data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip;
+                                  store_word = regfile[regByte];
+                                  store_ins = 1;
+                                  dependency = 1;
+                            end
+                            else begin
+                                  offset = 0;
+                                  can_decode = 0;
+                                  enable_memstage = 0;
+                            end
                         end
                         else begin
 
@@ -1118,9 +1164,30 @@ always_comb begin
                         /*
                          * It is NOT sign extended. The displacement value is 32 bits
                          */
-                        if (rip_flag == 1)
+                        if (rip_flag == 1) begin
                             reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {"%rip"}, {"), "},
                                         {reg_table_64[regByte]}};
+                            if ((score_board[regByte] == 0)) begin
+                                if(opcode == 141) begin
+                                  data_reqFlag = 0;
+                                  regB_contents = data_reqAddr;
+                                end
+                                else
+                                  data_reqFlag = 1; 
+                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip;
+                                regByte_contents = regByte;
+                                rmByte_contents = regByte; // We need dep = 1 and regByte to be score boarded.
+                                          // By default, if dep = 1, only regfile[rmByte] will be score boarded.
+                                dependency = 1;
+                                regB_contents = data_reqAddr;
+                                //$write("caught here data_reqAddr = %x", data_reqAddr);
+                            end
+                            else begin
+                                offset = 0;
+                                can_decode = 0;
+                                enable_memstage = 0;
+                            end
+                        end
                         else begin
                             if (modRM_byte.rm == 5) begin
                                 /*
@@ -1354,6 +1421,7 @@ always_comb begin
                         bytes_decoded_this_cycle = 0;
                         jump_target = temp_crr;
                         enable_memstage = 0;
+                        //$write("jc flag opcode = %x",opcode);
                         jump_cond_flag = 1;
                     end
                     end
@@ -1408,6 +1476,9 @@ always_comb begin
             $write("  %0h:    ", rip);
             print_prog_bytes(space_buffer, offset);
             $write("%s%s\n", instr_buffer, reg_buffer);
+        $display("\n");
+        disp_reg_file();
+        $display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1462,6 +1533,9 @@ always @ (posedge bus.clk) begin
      
         // Set all the flags right here
         rflags_seq.zf <= rflags.zf;
+        rflags_seq.jge <= rflags.jge;
+        rflags_seq.jg <= rflags.jg;
+        //rflags_seq.jne <= rflags.jne;
 
         if (jump_cond_flag)
             jump_cond_signal <= 1;
@@ -1493,6 +1567,7 @@ always @ (posedge bus.clk) begin
             idmem.data_regB <= regB_contents;
             idmem.data_imm <= imm_contents;
             idmem.ctl_opcode <= opcode_contents;
+            idmem.twob_opcode <= twob_opcode_contents;
             idmem.ctl_rmByte <= rmByte_contents;
             idmem.ctl_regByte <= regByte_contents;
             idmem.ctl_dep <= dependency;
