@@ -160,13 +160,14 @@ always_comb begin
           if(rflags_seq.jge == 1) begin
               jump_flag = 1;
           end
+//          rflags.jge = 0;
         end
 
         else if ((memex.ctl_opcode == 143 && memex.twob_opcode == 1)) begin
             // JGE instruction and JNL instruction
           jump_cond_flag = 0;
           //$write("jge: %x",rflags_seq.jge);
-          if(rflags_seq.jg == 1) begin
+          if(rflags_seq.jg == 1 && rflags_seq.zf == 0) begin
               jump_flag = 1;
           end
         end
@@ -207,6 +208,26 @@ always_comb begin
             alu_result_exwb = regfile[memex.ctl_rmByte] - regfile[memex.ctl_regByte];
         end
 
+        else if (memex.ctl_opcode == 57) begin
+//            $write("regA %x regB %x",memex.data_regA, memex.data_regB);
+            if(memex.data_regA == memex.data_regB)
+                rflags.zf = 1;
+            else
+                rflags.zf = 0;
+
+            if(memex.data_regB >= memex.data_regA) begin
+                    //$write("setting 1");
+                rflags.jge = 1;
+                rflags.jg = 1;
+            end
+            else begin
+                rflags.jge = 0;
+                rflags.jg = 0;
+                rflags.zf = 0;
+            end
+            
+        end
+
         else if (opcode_group[memex.ctl_opcode] != 0) begin
             // Check table A-6 of INTEL manual
             if (memex.ctl_regByte == 4) begin
@@ -236,23 +257,31 @@ always_comb begin
                 // CMP instruction
                 // We need to set the RFLAGS for the jump ins to properly execute
                 // Zero flag is set when the operands are equal
-                rflags.zf = (memex.data_regA == memex.data_imm);
+                if(memex.data_regA == memex.data_imm)
+                    rflags.zf = 1;
+                else
+                    rflags.zf = 0;
+
                 if(memex.data_regA >= memex.data_imm) begin
                     //$write("setting 1");
                     rflags.jge = 1;
-                   // rflags.jg = 1;
-                end
-                else if(memex.data_regA > memex.data_imm) begin
                     rflags.jg = 1;
-                    rflags.zf = 0;
                 end
                 else begin
-                    //$write("setting 0 imm %x regA %x", memex.data_imm, memex.data_regA);
                     rflags.jge = 0;
                     rflags.jg = 0;
                     rflags.zf = 0;
- //                   $finish;
                 end
+                /*else if((memex.data_regA > memex.data_imm) && !rflags.jge) begin
+                    rflags.jg = 1;
+                    //rflags.zf = 0;
+                    rflags.jge = 0;
+                    $write("jg = %x jge = %x",rflags.jg, rflags.jge);
+                end
+                else begin
+                    //$write("setting 0 imm %x regA %x", memex.data_imm, memex.data_regA);
+ //                   $finish;
+                end*/
 
                 //$write("0 flag is set %x, %x, %x",rflags.zf, memex.data_regA, memex.data_imm);
             end

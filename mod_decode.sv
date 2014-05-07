@@ -1137,6 +1137,20 @@ always_comb begin
                          */
                         assert(modRM_byte.mod == 0) else $fatal;
                         reg_buffer[0:95] = {{reg_table_64[regByte]}, {", "}, {"("}, {reg_table_64[rmByte]}, {")"}};
+                                if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                      store_reqFlag = 1;
+                                      regByte_contents = regByte;
+                                      rmByte_contents = rmByte;
+                                      data_reqAddr = regfile[rmByte];
+                                      store_word = regfile[regByte];
+                                      store_ins = 1;
+                                      dependency = 2;
+                               end
+                               else begin
+                                      offset = 0;
+                                      can_decode = 0;
+                                      enable_memstage = 0;
+                               end
                     end
                 end
 
@@ -1261,8 +1275,21 @@ always_comb begin
                         assert(modRM_byte.mod == 0) else $fatal;
                         if (rip_flag == 1)
                             reg_buffer[0:95] = {{"("}, {"%rip"}, {"), "}, {reg_table_64[regByte]}};
-                        else
+                        else begin
                             reg_buffer[0:95] = {{"("}, {reg_table_64[rmByte]}, {"), "}, {reg_table_64[regByte]}};
+                            if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                data_reqFlag = 1;
+                                data_reqAddr = regfile[rmByte];
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                dependency = 2;
+                            end
+                            else begin
+                                offset = 0;
+                                can_decode = 0;
+                                enable_memstage = 0;
+                            end
+                        end
                     end
                 end
 
