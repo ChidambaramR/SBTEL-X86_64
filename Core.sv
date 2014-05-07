@@ -51,6 +51,97 @@ logic callq_stage2;
 
 logic [0:63] data_reqAddr;
 
+function logic[0 : 8*8-1] byte8_swap(logic[0 : 8*8-1] inp);
+      logic[0 : 8*8-1] ret_val;
+      ret_val[0*8 : 1*8-1] = inp[7*8 : 8*8-1];
+      ret_val[1*8 : 2*8-1] = inp[6*8 : 7*8-1];
+      ret_val[2*8 : 3*8-1] = inp[5*8 : 6*8-1];
+      ret_val[3*8 : 4*8-1] = inp[4*8 : 5*8-1];
+      ret_val[4*8 : 5*8-1] = inp[3*8 : 4*8-1];
+      ret_val[5*8 : 6*8-1] = inp[2*8 : 3*8-1];
+      ret_val[6*8 : 7*8-1] = inp[1*8 : 2*8-1];
+      ret_val[7*8 : 8*8-1] = inp[0*8 : 1*8-1];
+      byte8_swap = ret_val;
+endfunction
+
+
+function logic[8*8-1 : 0] Bbyte8_swap(logic[8*8-1 : 0] inp);
+      logic[8*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[8*8-1 : 7*8];
+      ret_val[2*8-1 : 1*8] = inp[7*8-1 : 6*8];
+      ret_val[3*8-1 : 2*8] = inp[6*8-1 : 5*8];
+      ret_val[4*8-1 : 3*8] = inp[5*8-1 : 4*8];
+      ret_val[5*8-1 : 4*8] = inp[4*8-1 : 3*8];
+      ret_val[6*8-1 : 5*8] = inp[3*8-1 : 2*8];
+      ret_val[7*8-1 : 6*8] = inp[2*8-1 : 1*8];
+      ret_val[8*8-1 : 7*8] = inp[1*8-1 : 0*8];
+      Bbyte8_swap = ret_val;
+endfunction
+
+function logic[7*8-1 : 0] byte7_swap(logic[7*8-1 : 0] inp);
+      logic[7*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[7*8-1 : 6*8];
+      ret_val[2*8-1 : 1*8] = inp[6*8-1 : 5*8];
+      ret_val[3*8-1 : 2*8] = inp[5*8-1 : 4*8];
+      ret_val[4*8-1 : 3*8] = inp[4*8-1 : 3*8];
+      ret_val[5*8-1 : 4*8] = inp[3*8-1 : 2*8];
+      ret_val[6*8-1 : 5*8] = inp[2*8-1 : 1*8];
+      ret_val[7*8-1 : 6*8] = inp[1*8-1 : 0*8];
+      byte7_swap = ret_val;
+endfunction
+
+function logic[6*8-1 : 0] byte6_swap(logic[6*8-1 : 0] inp);
+      logic[6*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[6*8-1 : 5*8];
+      ret_val[2*8-1 : 1*8] = inp[5*8-1 : 4*8];
+      ret_val[3*8-1 : 2*8] = inp[4*8-1 : 3*8];
+      ret_val[4*8-1 : 3*8] = inp[3*8-1 : 2*8];
+      ret_val[5*8-1 : 4*8] = inp[2*8-1 : 1*8];
+      ret_val[6*8-1 : 5*8] = inp[1*8-1 : 0*8];
+      byte6_swap = ret_val;
+endfunction
+
+function logic[5*8-1 : 0] byte5_swap(logic[5*8-1 : 0] inp);
+      logic[5*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[5*8-1 : 4*8];
+      ret_val[2*8-1 : 1*8] = inp[4*8-1 : 3*8];
+      ret_val[3*8-1 : 2*8] = inp[3*8-1 : 2*8];
+      ret_val[4*8-1 : 3*8] = inp[2*8-1 : 1*8];
+      ret_val[5*8-1 : 4*8] = inp[1*8-1 : 0*8];
+      byte5_swap = ret_val;
+endfunction
+
+function logic[4*8-1 : 0] byte4_swap(logic[4*8-1 : 0] inp);
+      logic[4*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[4*8-1 : 3*8];
+      ret_val[2*8-1 : 1*8] = inp[3*8-1 : 2*8];
+      ret_val[3*8-1 : 2*8] = inp[2*8-1 : 1*8];
+      ret_val[4*8-1 : 3*8] = inp[1*8-1 : 0*8];
+      byte4_swap = ret_val;
+endfunction
+
+function logic[3*8-1 : 0] byte3_swap(logic[3*8-1 : 0] inp);
+      logic[3*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[3*8-1 : 2*8];
+      ret_val[2*8-1 : 1*8] = inp[2*8-1 : 1*8];
+      ret_val[3*8-1 : 2*8] = inp[1*8-1 : 0*8];
+      byte3_swap = ret_val;
+endfunction
+
+
+function logic[2*8-1 : 0] byte2_swap(logic[2*8-1 : 0] inp);
+      logic[2*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[2*8-1 : 1*8];
+      ret_val[2*8-1 : 1*8] = inp[1*8-1 : 0*8];
+      byte2_swap = ret_val;
+endfunction
+
+function logic[1*8-1 : 0] byte1_swap(logic[1*8-1 : 0] inp);
+      logic[1*8-1 : 0] ret_val;
+      ret_val[1*8-1 : 0*8] = inp[1*8-1 : 0*8];
+      byte1_swap = ret_val;
+endfunction
+
 initial begin
     // Initial value of RSP from mailing list
 
@@ -63,8 +154,8 @@ initial begin
         regfile[j[1:4]] = {64{1'b0}};
     end
 
-    regfile[4] = 31752;  // WARNING. Change it to 0x7C00 after Varun's fix
-    regfile[6] = 1;
+    regfile[4] = 31744;  // WARNING. Change it to 0x7C00 after Varun's fix
+    //regfile[6] = 1;
     callqFlag = 0;
 
     store_ack_received = 0;
@@ -107,6 +198,7 @@ endfunction
 
 logic send_fetch_req;
 logic outstanding_fetch_req;
+logic jump_sent;
 
 always_comb begin
     if (fetch_state != fetch_idle) begin
@@ -114,7 +206,7 @@ always_comb begin
     end else if (bus.reqack) begin
         send_fetch_req = 0; // hack: still idle, but already got ack (in theory, we could try to send another request as early as this)
     end else begin
-    if (!jump_signal && !store_ins && !data_req)
+    if (!jump_signal && !jump_cond_signal && !store_ins && !data_req)
             send_fetch_req = (fetch_offset - decode_offset < 7'd32);
         //if (jump_signal && !bus.respcyc) begin
         //    jump_flag = 0;
@@ -166,11 +258,14 @@ always @ (posedge bus.clk) begin
             if (jump_signal && !outstanding_fetch_req) begin
                 // Fetch request for jump instruction
                 outstanding_fetch_req <= 1;
-                bus.req <= fetch_rip & ~63;
+                bus.req <= jump_target & ~63;
                            // $write("Sending req on bus 1");
                 bus.reqtag <= { bus.READ, bus.MEMORY, 8'b0 };
                 bus.reqcyc <= 1;
                 store_writeback <= 0;
+                fetch_offset <= 0;
+                decode_offset <= 0;
+                jump_sent <= 1;
             end
 
             if (!data_req && !store_ins) begin
@@ -208,7 +303,7 @@ always @ (posedge bus.clk) begin
                             //$write("Sending req on bus 2");
                             bus.reqcyc <= 1;
                             //store_ack_waiting <= 1;
-                            bus.req <= data_buffer[data_offset*8 +: 64];
+                            bus.req <= byte8_swap(data_buffer[data_offset*8 +: 64]);
                             //if (data_offset == 56)
                             //    $finish;
                             data_offset <= data_offset + 8;
@@ -218,7 +313,7 @@ always @ (posedge bus.clk) begin
                             store_opn <= 0;
                             store_done <= 0;
                             //store_writebackFlag = 1;
-                            bus.req <= data_buffer[data_offset*8 +: 64];
+                            bus.req <= byte8_swap(data_buffer[data_offset*8 +: 64]);
                             //$write("wrote to memory");
                             if (callqFlag)
                                 callq_stage2 <= 1;
@@ -230,6 +325,7 @@ always @ (posedge bus.clk) begin
             else begin
                 // Sending a request for data
                 if (!outstanding_fetch_req && (data_req)) begin
+                    //$write("sending req for %x", (data_reqAddr & ~63));
                     bus.req <= (data_reqAddr & ~63) ;
                     fetch_data_skip <= (data_reqAddr[58:63])&(~7);
                     fetch_store_skip <= (data_reqAddr[58:63])&(~7);
@@ -254,12 +350,11 @@ always @ (posedge bus.clk) begin
             /*
              * It takes around 48 micro seconds for a response to come back.
              */
-            if (jump_signal) begin
-                fetch_offset <= 0;
-                decode_offset <= 0;
+            if (jump_signal && jump_sent) begin
                 jump_signal <= 0;
                 /* verilator lint_off BLKSEQ */
                 jump_flag = 0;  // TODO: Is this correct?
+                jump_sent <= 0;
             end
 
             assert(!send_fetch_req) else $fatal;
@@ -273,25 +368,25 @@ always @ (posedge bus.clk) begin
                 fetch_skip <= fetch_skip - 8;
             end else begin
                 if (internal_offset == 0)
-                    decode_buffer[(fetch_offset)*8 +: 64] <= bus.resp;
+                  decode_buffer[(fetch_offset)*8 +: 64] <= (bus.resp);
                 else if (internal_offset == 1)
-                    decode_buffer[(fetch_offset)*8 +: 56] <= bus.resp[55:0];
+                  decode_buffer[(fetch_offset)*8 +: 56] <= (bus.resp[55:0]);
                 else if (internal_offset == 2)
-                    decode_buffer[(fetch_offset)*8 +: 48] <= bus.resp[47:0];
+                  decode_buffer[(fetch_offset)*8 +: 48] <= (bus.resp[47:0]);
                 else if (internal_offset == 3)
-                    decode_buffer[(fetch_offset)*8 +: 40] <= bus.resp[39:0];
+                  decode_buffer[(fetch_offset)*8 +: 40] <= (bus.resp[39:0]);
                 else if (internal_offset == 4)
-                    decode_buffer[(fetch_offset)*8 +: 32] <= bus.resp[31:0];
+                  decode_buffer[(fetch_offset)*8 +: 32] <= (bus.resp[31:0]);
                 else if (internal_offset == 5)
-                    decode_buffer[(fetch_offset)*8 +: 24] <= bus.resp[23:0];
+                  decode_buffer[(fetch_offset)*8 +: 24] <= (bus.resp[23:0]);
                 else if (internal_offset == 6)
-                    decode_buffer[(fetch_offset)*8 +: 16] <= bus.resp[15:0];
+                  decode_buffer[(fetch_offset)*8 +: 16] <= (bus.resp[15:0]);
                 else if (internal_offset == 7)
-                    decode_buffer[(fetch_offset)*8 +: 8] <= bus.resp[7:0];
+                  decode_buffer[(fetch_offset)*8 +: 8] <=  (bus.resp[7:0]);
                 //$display("orig resp %x",bus.resp);
-                //$display("resp %x io = %x",bus.resp[55:0], internal_offset);
+                //$display("resp %x io = %x",bus.resp[31:0], internal_offset);
                 //$display("%x",decode_buffer[(fetch_offset+internal_offset)*8 +: 64]);
-                fetch_offset <= fetch_offset - internal_offset + 8;
+                fetch_offset <= (fetch_offset + 8)- internal_offset;
                 internal_offset <= 0;
             end
             //end
@@ -323,7 +418,7 @@ always @ (posedge bus.clk) begin
                     fetch_data_skip <= fetch_data_skip - 8;
                 end
                 else if(!load_done) begin
-                    load_buffer[(data_offset*8) +: 64] <= bus.resp;
+                    load_buffer[(data_offset*8) +: 64] <= byte8_swap(bus.resp);
                     load_done <= 1;
                     if(callqFlag)
                         callq_stage2 <= 1;
@@ -338,7 +433,7 @@ always @ (posedge bus.clk) begin
                     /*
                      * If fetch store skip has some value, then we dont have to mangle these contents.
                      */
-                    data_buffer[data_offset*8 +: 64] <= bus.resp;
+                    data_buffer[data_offset*8 +: 64] <= byte8_swap(bus.resp);
                     fetch_store_skip <= fetch_store_skip - 8;
                 end
                 else if (once) begin
@@ -346,7 +441,7 @@ always @ (posedge bus.clk) begin
                     once <= 0;
                 end
                 else
-                    data_buffer[data_offset*8 +: 64] <= bus.resp;
+                    data_buffer[data_offset*8 +: 64] <= byte8_swap(bus.resp);
                 
                 data_offset <= data_offset + 8;
                 //$display("Bus.resp = %x data_offset = %x",bus.resp, data_offset);
@@ -515,11 +610,12 @@ mod_decode dec (
         // INPUT PARAMS
         jump_signal, fetch_rip, fetch_offset, decode_offset, 
         decode_bytes, opcode_group, callq_stage2, load_buffer, store_writeback, 
+        outstanding_fetch_req,
         // OUTPUT PARAMS
         regfile, rflags, load_done, memex, exwb, rip, 
         jump_target, store_word, store_ins, store_opn, 
         jump_flag, data_req, data_reqAddr, bytes_decoded_this_cycle,
-        store_writebackFlag, callqFlag, rflags_seq, idmem
+      store_writebackFlag, callqFlag, rflags_seq, idmem, jump_cond_signal
         );
 
 always @ (posedge bus.clk) begin

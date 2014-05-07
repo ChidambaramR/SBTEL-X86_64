@@ -190,9 +190,10 @@ always_comb begin
         else if (memex.ctl_opcode == 116 || memex.ctl_opcode == 132) begin
             // JE instruction
             jump_cond_flag = 0;
+            $write("zf = %x",rflags_seq.zf);
             if (rflags_seq.zf == 1) begin
               jump_flag = 1; // Zero flag is set for JE instruction.
-              //$write("Conditional jump");
+              $write("Conditional jump");
             end
             //rflags.zf = 0;
         end
@@ -203,7 +204,7 @@ always_comb begin
 
         else if(memex.ctl_opcode == 41) begin
             //$write("subtracting here");
-            alu_result_exwb = regfile[memex.ctl_regByte] - regfile[memex.ctl_rmByte];
+            alu_result_exwb = regfile[memex.ctl_rmByte] - regfile[memex.ctl_regByte];
         end
 
         else if (opcode_group[memex.ctl_opcode] != 0) begin
@@ -239,7 +240,7 @@ always_comb begin
                 if(memex.data_regA >= memex.data_imm) begin
                     //$write("setting 1");
                     rflags.jge = 1;
-                    rflags.jg = 1;
+                   // rflags.jg = 1;
                 end
                 else if(memex.data_regA > memex.data_imm) begin
                     rflags.jg = 1;

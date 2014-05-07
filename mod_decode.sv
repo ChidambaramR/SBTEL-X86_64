@@ -81,6 +81,7 @@ module mod_decode (
     input callq_stage2,
     input [0:8*8-1] load_buffer,
     input store_writeback,
+    input outstanding_fetch_req,
     
     output [0:63] regfile[0:16-1],
     output flags_reg rflags, 
@@ -99,7 +100,8 @@ module mod_decode (
     output store_writebackFlag,
     output callqFlag,
     output flags_reg rflags_seq,
-    output ID_MEM idmem
+    output ID_MEM idmem,
+    output jump_cond_signal
 );
     
 
@@ -649,8 +651,8 @@ always_comb begin
             opcode = decode_bytes[offset*8 +: 1*8];
             opcode_contents = opcode; // This is for storing the value in the pipeline reg
             space_buffer[(offset)*8 +: 8] = opcode;
-            if (opcode == 235)
-                $write("here");
+            //if (opcode == 235)
+                //$write("here");
             offset += 1;
 
             /*
@@ -946,13 +948,14 @@ always_comb begin
                          * Case for CALLQ instruction
                          */
                         if (opcode == 255) begin
-                            if (score_board[rmByte] == 0 && score_board[regByte] == 0 /* RSP */) begin
+                            if (score_board[rmByte] == 0 && score_board[4] == 0 /* RSP */) begin
                                 if (callq_stage2) begin
                                     can_decode = 0;
                                     bytes_decoded_this_cycle = 0;
                                     enable_memstage = 0;
                                     jump_flag = 1; // Unconditional jump
                                     jump_target = regfile[rmByte];
+                                    $write("jump target = %x rmByte = %x regByte = %x",jump_target, rmByte, regByte);
                                     callqFlag = 0;
                                     //$finish;
                                 end
@@ -964,8 +967,8 @@ always_comb begin
                                     regByte_contents = regByte;
                                     rmByte_contents = rmByte;
                                     data_reqAddr = regfile[regByte] - 8;
-                                    store_word = rip + 2;
-                                    //$write("caught for callq RSP = %x word = %x", data_reqAddr, store_word);
+                                    store_word = rip + 3;
+                                    $write("caught for callq RSP = %x word = %x reg %x, rm %x", data_reqAddr, store_word, regByte, rmByte);
                                     // can_decode = 0;
                                     dependency = 2;
                                     //$finish;
@@ -1037,7 +1040,7 @@ always_comb begin
                          */
                         if (rip_flag == 1) begin
                             //$write("caught here");
-                            $finish;
+                            //$finish;
                             reg_buffer[0:183] = {{reg_table_64[regByte]}, {", $0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("},
                                         {"%rip"}, {")"}};
                             if ((score_board[regByte] == 0)) begin
@@ -1174,7 +1177,7 @@ always_comb begin
                                 end
                                 else
                                   data_reqFlag = 1; 
-                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip;
+                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip + offset;
                                 regByte_contents = regByte;
                                 rmByte_contents = regByte; // We need dep = 1 and regByte to be score boarded.
                                           // By default, if dep = 1, only regfile[rmByte] will be score boarded.
@@ -1423,6 +1426,7 @@ always_comb begin
                         enable_memstage = 0;
                         //$write("jc flag opcode = %x",opcode);
                         jump_cond_flag = 1;
+                        //$write("je jump_target = %x, jump_cond_flag = %x",jump_target, jump_cond_flag);
                     end
                     end
                 end

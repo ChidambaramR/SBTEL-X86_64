@@ -50,6 +50,7 @@ always_comb begin
 
         else if(exwb.twob_opcode == 1) begin
             // Do nothing when a branch is not taken
+          //$write("branch not taken");
         end
 
         else if(exwb.ctl_opcode == 193) begin
@@ -88,6 +89,9 @@ always_comb begin
         else if ((exwb.ctl_opcode >= 184) && (exwb.ctl_opcode <= 191)) begin
              regfile[exwb.ctl_rmByte] = exwb.alu_result;
              //$write("special move %x into %x",exwb.alu_result, exwb.ctl_rmByte);
+        end
+        else if (exwb.ctl_opcode == 57) begin
+            // Do nithing for CMP instruction
         end
         else begin
             regfile[exwb.ctl_rmByte] = exwb.alu_result;
