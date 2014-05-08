@@ -554,6 +554,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1]  mod;
 } ID_MEM;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -571,6 +572,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -585,6 +587,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 

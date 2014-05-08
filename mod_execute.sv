@@ -69,6 +69,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -84,11 +85,13 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 // Temporary values to be given to the EXWB pipeline register
 logic [0:63] rip_exwb;
 logic [0:1]  dep_exwb;
+logic [0:1]  mod_exwb;
 logic sim_end_signal_exwb;
 logic[0 : 63] alu_result_exwb;
 logic[0 : 63] alu_ext_result_exwb;
@@ -108,6 +111,7 @@ always_comb begin
     if (can_execute) begin : execute_block
 
         dep_exwb = memex.ctl_dep;
+        mod_exwb = memex.mod;
         sim_end_signal_exwb = memex.sim_end;
         rmByte_contents_exwb = memex.ctl_rmByte;
         opcode_exwb = memex.ctl_opcode;
@@ -228,6 +232,10 @@ always_comb begin
               $write("Conditional jump");
             end
             //rflags.zf = 0;
+        end
+
+        else if (memex.ctl_opcode == 137 && memex.mod == 3) begin // Move reg to reg
+            alu_result_exwb = regfile[memex.ctl_regByte];
         end
 
         else if (memex.ctl_opcode == 137 && !store_memstage_active) begin // Move reg to reg
@@ -416,7 +424,8 @@ always @ (posedge bus.clk) begin
             exwb.ctl_regByte <= regByte_contents_exwb;
             exwb.sim_end <= sim_end_signal_exwb; 
             exwb.ctl_opcode <= opcode_exwb;
-            exwb.twob_opcode <= memex.twob_opcode; 
+            exwb.twob_opcode <= memex.twob_opcode;
+            exwb.mod <= mod_exwb;
             //$write("rmByte %0h regByte %0h dep EXWB %0h",rmByte_contents_exwb, regByte_contents_exwb, dep_exwb);
             score_board[rmByte_contents_exwb] <= 0;
             if (dep_exwb == 2) begin

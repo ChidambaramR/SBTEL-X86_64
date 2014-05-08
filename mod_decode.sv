@@ -36,6 +36,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } ID_MEM;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -54,6 +55,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -69,6 +71,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 module mod_decode (
@@ -128,6 +131,7 @@ endfunction
 logic[0 : 63] regA_contents;
 logic[0 : 63] regB_contents;
 logic[0 : 63] imm_contents;
+logic[0 : 1]  mod_contents;
 logic[0 : 7] opcode_contents;
 logic         twob_opcode_contents;
 logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
@@ -595,6 +599,7 @@ always_comb begin
     if (can_decode) begin : decode_block
         // Variables which are to be reset for each new decoding
         offset = 0;
+        mod_contents = 0;
         opcode_enc_byte = 0;
         disp_byte = 0;
         imm_byte = 0;
@@ -1030,6 +1035,8 @@ always_comb begin
                             regA_contents = regfile[regByte];
                             regB_contents = regfile[rmByte];
                             imm_contents = {64{1'b0}};
+                            mod_contents = 3;
+                            $write("mod = 3");
                             dependency = 2;
                         end
                         else begin
@@ -1175,9 +1182,12 @@ always_comb begin
                             regA_contents = regfile[regByte];
                             regB_contents = regfile[rmByte];
                             imm_contents = {64{1'b0}};
+                            mod_contents = 3;
+                            dependency = 2;
                         end
                         else begin
                             offset = 0;
+                            can_decode = 0;
                             enable_memstage = 0;
                         end
 
@@ -1512,9 +1522,9 @@ always_comb begin
             $write("  %0h:    ", rip);
             print_prog_bytes(space_buffer, offset);
             $write("%s%s\n", instr_buffer, reg_buffer);
-        //$display("\n");
-        //disp_reg_file();
-        //$display("\n");
+        $display("\n");
+        disp_reg_file();
+        $display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1611,6 +1621,7 @@ always @ (posedge bus.clk) begin
             idmem.ctl_regByte <= regByte_contents;
             idmem.ctl_dep <= dependency;
             idmem.sim_end <= sim_end_signal;
+            idmem.mod <= mod_contents;
             can_memstage <= 1;
             if (data_reqFlag) begin
                 data_req <= 1;

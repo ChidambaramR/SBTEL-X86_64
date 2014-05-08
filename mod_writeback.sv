@@ -22,6 +22,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 always_comb begin
@@ -83,11 +84,16 @@ always_comb begin
             end
         end
 
-        else if (exwb.ctl_opcode == 137 && store_memstage_active) begin
-            //$write("here!! wr opcode = %x", exwb.ctl_opcode);
+        else if (exwb.ctl_opcode == 137 && store_memstage_active && exwb.mod !=3) begin
             // STORE INS
             store_writebackFlag = 1;
         end
+        
+        else if (exwb.ctl_opcode == 137 && exwb.mod == 3) begin
+            $write("wb to %x from %x",exwb.ctl_rmByte, exwb.alu_result);
+            regfile[exwb.ctl_rmByte] = exwb.alu_result;
+        end
+
         else if (exwb.ctl_opcode == 139 || (exwb.ctl_opcode == 141 && !exwb.twob_opcode)) begin
             // LOAD INS
           //$write("LD %x into %x",exwb.alu_result, exwb.ctl_regByte);
