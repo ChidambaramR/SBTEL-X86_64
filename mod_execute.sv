@@ -172,6 +172,14 @@ always_comb begin
 //          rflags.jge = 0;
         end
 
+        else if ((memex.ctl_opcode == 131 && memex.twob_opcode == 1)) begin
+            // JAE instruction
+            jump_cond_flag = 0;
+            if(rflags_seq.jge == 1) begin
+                jump_flag = 1;
+            end
+        end
+
         else if ((memex.ctl_opcode == 143 && memex.twob_opcode == 1)) begin
             // JGE instruction and JNL instruction
           jump_cond_flag = 0;
@@ -193,6 +201,15 @@ always_comb begin
           if(rflags_seq.zf == 0) begin
               jump_flag = 1;
           end
+        end
+
+        else if ((memex.ctl_opcode == 133 && memex.twob_opcode == 0)) begin
+            // TEST instruction
+            $write("regA = %x, regB = %x",memex.data_regA, memex.data_regB);
+            if( memex.data_regA & memex.data_regB )
+                rflags.zf = 0; // Not equal
+            else
+                rflags.zf = 1; // Equal
         end
 
 

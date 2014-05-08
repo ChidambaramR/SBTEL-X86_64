@@ -636,6 +636,8 @@ always @ (posedge bus.clk) begin
                 //fetch_offset <= 0;
             end
         end
+        if(jump_flag && bus.respcyc)
+                jump_signal <= 1;
 //        $display("\n\n");
 //        disp_reg_file();
 //        $display("\n\n");

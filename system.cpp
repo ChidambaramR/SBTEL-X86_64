@@ -240,7 +240,7 @@ long long syscall_cse502(long long rax, long long rdi, long long rsi, long long 
 		if (rdi != 0) {
 			global_ram_brkptr = rdi;
 			assert(rdi > 0 && rdi < global_ramsize);
-			return 0;
+			return global_ram_brkptr;
 		}
 		return global_ram_brkptr;
 	case __NR_clock_gettime:
