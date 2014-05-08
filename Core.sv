@@ -285,6 +285,8 @@ always @ (posedge bus.clk) begin
                 if (!outstanding_fetch_req) begin
                     if (cycle == 1) begin
                         bus.req <= (data_reqAddr & ~63);
+                        //if((data_reqAddr & ~63) == 6299264)
+                        //    $finish;
                         bus.reqcyc <= 1;
                         bus.reqtag <= { bus.WRITE, bus.MEMORY, {6'b0,1'b1,1'b1}};
                         cycle <= 0;
@@ -327,6 +329,8 @@ always @ (posedge bus.clk) begin
                 if (!outstanding_fetch_req && (data_req)) begin
                     //$write("sending req for %x", (data_reqAddr & ~63));
                     bus.req <= (data_reqAddr & ~63) ;
+                    //if((data_reqAddr & ~63) == 6299264)
+                      //  $finish;
                     fetch_data_skip <= (data_reqAddr[58:63])&(~7);
                     fetch_store_skip <= (data_reqAddr[58:63])&(~7);
                     internal_data_offset <= (data_reqAddr[58:63])&(7);

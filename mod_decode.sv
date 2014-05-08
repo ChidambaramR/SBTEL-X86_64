@@ -134,6 +134,7 @@ logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
 logic[0 : 4-1] regByte_contents;    // 4 bit Register A INDEX for the ALU
 logic[0 :1] dependency;
 logic sim_end_signal;               // Variable to keep track of simulation ending
+logic sim_end_seq;               // Variable to keep track of simulation ending
 
 logic can_memstage;
 logic can_writeback;
@@ -588,7 +589,7 @@ wire can_decode = (fetch_offset - decode_offset >= 7'd15);
 always_comb begin
     dependency = 0;
 
-    if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 || load_done == 1)
+  if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 || load_done == 1 || sim_end_seq == 1)
         can_decode = 0;
 
     if (can_decode) begin : decode_block
@@ -865,6 +866,10 @@ always_comb begin
                         if (score_board[0] == 0 && score_board[7] == 0 && score_board[6] == 0 
                               && score_board[2] == 0 && score_board[10] == 0 && score_board[8] == 0
                               && score_board[9] == 0) begin
+                              if(regfile[0] == 60) begin
+                                //$write("sim end = 1");
+                                sim_end_signal = 1;
+                              end
                             opcode_enc_byte = "XXX";
                             rmByte_contents = 0; // RAX
                             dependency = 1;
@@ -955,7 +960,7 @@ always_comb begin
                                     enable_memstage = 0;
                                     jump_flag = 1; // Unconditional jump
                                     jump_target = regfile[rmByte];
-                                    $write("jump target = %x rmByte = %x regByte = %x",jump_target, rmByte, regByte);
+                                    //$write("jump target = %x rmByte = %x regByte = %x",jump_target, rmByte, regByte);
                                     callqFlag = 0;
                                     //$finish;
                                 end
@@ -968,7 +973,7 @@ always_comb begin
                                     rmByte_contents = rmByte;
                                     data_reqAddr = regfile[regByte] - 8;
                                     store_word = rip + 3;
-                                    $write("caught for callq RSP = %x word = %x reg %x, rm %x", data_reqAddr, store_word, regByte, rmByte);
+                                    //$write("caught for callq RSP = %x word = %x reg %x, rm %x", data_reqAddr, store_word, regByte, rmByte);
                                     // can_decode = 0;
                                     dependency = 2;
                                     //$finish;
@@ -1498,8 +1503,8 @@ always_comb begin
             //$finish;
             //sim_end_signal = 1; // Simulation should end
         end
-        else
-            sim_end_signal = 0; // Simulation should not end
+        //else
+          //  sim_end_signal = 0; // Simulation should not end
 
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
@@ -1507,9 +1512,9 @@ always_comb begin
             $write("  %0h:    ", rip);
             print_prog_bytes(space_buffer, offset);
             $write("%s%s\n", instr_buffer, reg_buffer);
-        $display("\n");
-        disp_reg_file();
-        $display("\n");
+        //$display("\n");
+        //disp_reg_file();
+        //$display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1567,6 +1572,9 @@ always @ (posedge bus.clk) begin
         rflags_seq.jge <= rflags.jge;
         rflags_seq.jg <= rflags.jg;
         //rflags_seq.jne <= rflags.jne;
+
+        if(sim_end_signal == 1)
+            sim_end_seq <= 1;
 
         if (jump_cond_flag)
             jump_cond_signal <= 1;

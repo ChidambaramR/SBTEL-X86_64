@@ -116,8 +116,16 @@ always_comb begin
         if (dep_exwb == 2 || memex.ctl_opcode == 139) begin
             regByte_contents_exwb = memex.ctl_regByte;
         end
+      
+        if (memex.sim_end == 1) begin
+            // Simulation going to end. Do nothing
+        end
 
-        if (memex.ctl_opcode == 199 || (memex.ctl_opcode >= 184 && memex.ctl_opcode <= 191)) begin
+        else if (memex.ctl_opcode == 144) begin
+            // NO OP
+        end
+
+        else if (memex.ctl_opcode == 199 || (memex.ctl_opcode >= 184 && memex.ctl_opcode <= 191)) begin
             // Mov Imm
             //regfile[memex.ctl_rmByte] = memex.data_imm;
             alu_result_exwb = memex.data_imm;
@@ -130,6 +138,7 @@ always_comb begin
             //$write("Asssigning the value to pipeline register");
             alu_result_exwb = load_buffer; // The load buffer is filled in the mem stage
         end
+
 
         else if ((memex.ctl_opcode >= 80) && (memex.ctl_opcode < 88)) begin
             // PUSH 
@@ -170,6 +179,11 @@ always_comb begin
           if(rflags_seq.jg == 1 && rflags_seq.zf == 0) begin
               jump_flag = 1;
           end
+        end
+
+        else if ((memex.ctl_opcode == 33)) begin
+          // AND instructions
+          alu_result_exwb = memex.data_regA & memex.data_regB;
         end
 
         else if ((memex.ctl_opcode == 133 && memex.twob_opcode == 1)) begin

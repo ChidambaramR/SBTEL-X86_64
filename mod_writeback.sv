@@ -26,7 +26,14 @@ typedef struct packed {
 
 always_comb begin
     if (can_writeback) begin : writeback_block
-        if (exwb.ctl_opcode == 247) begin
+        if (exwb.sim_end == 1)
+            $finish;
+
+        if (exwb.ctl_opcode == 144) begin
+            // Do nothing
+        end
+
+        else if (exwb.ctl_opcode == 247) begin
             regfile[0] = exwb.alu_result;
             regfile[2] = exwb.alu_ext_result;
         end
@@ -99,8 +106,6 @@ always_comb begin
         end
         dep_exwb = 0;
         //$display("Issuing writeback");
-        if (exwb.sim_end == 1)
-            $finish;
     end
 end
 
