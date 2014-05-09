@@ -92,7 +92,7 @@ always_comb begin
         end
         
         else if (exwb.ctl_opcode == 137 && exwb.mod == 3) begin
-            $write("wb to %x from %x",exwb.ctl_rmByte, exwb.alu_result);
+            //$write("wb to %x from %x",exwb.ctl_rmByte, exwb.alu_result);
             regfile[exwb.ctl_rmByte] = exwb.alu_result;
         end
 

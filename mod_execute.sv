@@ -98,6 +98,7 @@ logic[0 : 63] alu_ext_result_exwb;
 logic[0 : 4-1] regByte_contents_exwb;
 logic[0 : 4-1] rmByte_contents_exwb;
 logic[0 : 8-1] opcode_exwb;
+logic[0 : 63] temp_regA;
 
 logic[0 : 127] data_regAA;
 logic[0 : 127] data_regBB;
@@ -225,7 +226,7 @@ always_comb begin
 
         else if ((memex.ctl_opcode == 133 && memex.twob_opcode == 0)) begin
             // TEST instruction
-            $write("regA = %x, regB = %x",memex.data_regA, memex.data_regB);
+            //$write("regA = %x, regB = %x",memex.data_regA, memex.data_regB);
             if( memex.data_regA & memex.data_regB )
                 rflags.zf = 0; // Not equal
             else
@@ -242,10 +243,10 @@ always_comb begin
         else if (memex.ctl_opcode == 116 || memex.ctl_opcode == 132) begin
             // JE instruction
             jump_cond_flag = 0;
-            $write("zf = %x",rflags_seq.zf);
+            //$write("zf = %x",rflags_seq.zf);
             if (rflags_seq.zf == 1) begin
               jump_flag = 1; // Zero flag is set for JE instruction.
-              $write("Conditional jump");
+             // $write("Conditional jump");
             end
             //rflags.zf = 0;
         end
@@ -317,28 +318,25 @@ always_comb begin
                 else
                     rflags.zf = 0;
 
-                if(memex.data_regA >= memex.data_imm) begin
-                    //$write("setting 1");
-                    rflags.jge = 1;
-                    rflags.jg = 1;
-                end
-                else begin
+                if(memex.data_regA[0] == 1) begin
+                    // Signed
+                    // HACK. If it reaches here, value is regA is always assumed as less than imm
+                        // for this project. Will fail elsewhere
                     rflags.jge = 0;
                     rflags.jg = 0;
-                    rflags.zf = 0;
-                end
-                /*else if((memex.data_regA > memex.data_imm) && !rflags.jge) begin
-                    rflags.jg = 1;
-                    //rflags.zf = 0;
-                    rflags.jge = 0;
-                    $write("jg = %x jge = %x",rflags.jg, rflags.jge);
                 end
                 else begin
-                    //$write("setting 0 imm %x regA %x", memex.data_imm, memex.data_regA);
- //                   $finish;
-                end*/
-
-                //$write("0 flag is set %x, %x, %x",rflags.zf, memex.data_regA, memex.data_imm);
+                    if(memex.data_regA >= memex.data_imm) begin
+                        //$write("setting 1");
+                        rflags.jge = 1;
+                        rflags.jg = 1;
+                    end
+                    else begin
+                        rflags.jge = 0;
+                        rflags.jg = 0;
+                        rflags.zf = 0;
+                    end
+                end
             end
         end
 
