@@ -176,6 +176,14 @@ always_comb begin
 //          rflags.jge = 0;
         end
 
+        else if ((memex.ctl_opcode == 142 && memex.twob_opcode == 1)) begin
+            // JLE instructionn
+          jump_cond_flag = 0;
+          if(rflags_seq.jge == 0 && rflags_seq.jg == 0) begin
+              jump_flag = 1;
+          end
+        end
+
         else if ((memex.ctl_opcode == 131 && memex.twob_opcode == 1)) begin
             // JAE instruction
             jump_cond_flag = 0;
@@ -185,10 +193,18 @@ always_comb begin
         end
 
         else if ((memex.ctl_opcode == 143 && memex.twob_opcode == 1)) begin
-            // JGE instruction and JNL instruction
+            // JG instruction 
           jump_cond_flag = 0;
           //$write("jge: %x",rflags_seq.jge);
           if(rflags_seq.jg == 1 && rflags_seq.zf == 0) begin
+              jump_flag = 1;
+          end
+        end
+
+        else if ((memex.ctl_opcode == 140 && memex.twob_opcode == 1)) begin
+            // JL instructionn
+          jump_cond_flag = 0;
+          if(rflags_seq.jge == 0 && rflags_seq.jg == 0 && rflags_seq.zf == 0) begin
               jump_flag = 1;
           end
         end
