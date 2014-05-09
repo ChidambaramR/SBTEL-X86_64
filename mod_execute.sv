@@ -118,7 +118,7 @@ always_comb begin
         opcode_exwb = memex.ctl_opcode;
         //$write("twob opcode = %x",memex.twob_opcode);
         //$write("Opcode at execute stage = %x",memex.ctl_opcode);
-        if (dep_exwb == 2 || memex.ctl_opcode == 139) begin
+        if (dep_exwb == 2 || memex.ctl_opcode == 139 || memex.ctl_opcode == 141) begin
             regByte_contents_exwb = memex.ctl_regByte;
         end
       

@@ -626,7 +626,8 @@ always_comb begin
 
         // Compute program address for next instruction
         rip = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
-
+        //if(rip == 4201971)
+        //    $finish;
         /*
          * Prefix decoding
          */
@@ -1204,6 +1205,7 @@ always_comb begin
                                 if(opcode == 141) begin
                                   data_reqFlag = 0;
                                   regB_contents = data_reqAddr;
+                                  //$write("regB contents = %x regByte = %x",regB_contents, regByte);
                                 end
                                 else
                                   data_reqFlag = 1; 
@@ -1540,12 +1542,12 @@ always_comb begin
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
         if ((instr_buffer != empty_str) && can_decode) begin
-//            $write("  %0h:    ", rip);
-//            print_prog_bytes(space_buffer, offset);
-//            $write("%s%s\n", instr_buffer, reg_buffer);
-//        $display("\n");
-//        disp_reg_file();
-//        $display("\n");
+            //$write("  %0h:    ", rip);
+            //print_prog_bytes(space_buffer, offset);
+            //$write("%s%s\n", instr_buffer, reg_buffer);
+        //$display("\n");
+        //disp_reg_file();
+        //$display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
