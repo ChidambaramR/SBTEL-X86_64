@@ -344,6 +344,17 @@ always_comb begin
             alu_result_exwb = memex.data_regA + memex.data_regB;;
         end
 
+        else if ((memex.ctl_opcode == 175) && (memex.twob_opcode == 1)) begin
+            data_regAA = {{64{memex.data_regB[0]}}, memex.data_regB}; 
+            data_regBB = {{64{memex.data_regA[0]}}, memex.data_regA};
+            
+            // 128 bit multiplication
+            temp16 = data_regAA * data_regBB;
+            // Store result into RDX:RAX
+            alu_ext_result_exwb = temp16[0:63];
+            alu_result_exwb = temp16[64:127];
+        end
+
         else if (memex.ctl_opcode == 247 ) begin
             // IMUL instruction "RDX:RAX = RAX * REG64"
 

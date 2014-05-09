@@ -34,7 +34,8 @@ always_comb begin
             // Do nothing
         end
 
-        else if (exwb.ctl_opcode == 247) begin
+        else if ((exwb.ctl_opcode == 247) || ((memex.ctl_opcode == 175) && (memex.twob_opcode == 1))) begin
+            //IMUL
             regfile[0] = exwb.alu_result;
             regfile[2] = exwb.alu_ext_result;
         end
