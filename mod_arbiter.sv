@@ -10,19 +10,12 @@ enum { sysbus_idle, sysbus_iread, sysbus_dread, sysbus_dwrite } sysbus_state;
 enum { data_req, instr_req, no_req } request_type;
 
 logic send_sysbus_req;
-logic [DATA_WIDTH-1:0] data_buffer;
+logic [0:DATA_WIDTH-1] data_buffer;
 logic [ TAG_WIDTH-1:0] tag_data;
 integer data_offset;
-bit store_ack_rec;
 
 initial begin
-    data_offset = 0;
     $display("Initializing Arbiter Module");
-end
-
-always_comb begin
-    if (bus.reqack && sysbus_state == sysbus_dwrite)
-        store_ack_rec = 1;
 end
 
 assign bus.respack = bus.respcyc; // always able to accept response
@@ -48,7 +41,6 @@ always @ (posedge bus.clk) begin
                     sysbus_state <= sysbus_dread;
                 end else begin
                     sysbus_state <= sysbus_dwrite;
-                    store_ack_rec = 0;
                 end
 
                 
@@ -72,7 +64,7 @@ always @ (posedge bus.clk) begin
                 data_buffer[data_offset*8 +: 64] <= bus.resp;
                 data_offset <= data_offset + 8;
 
-                if (data_offset == 64) begin
+                if (data_offset >= 56) begin
                     // 64 bytes read, ready to send them to icache
                     iCacheBus.resptag <= bus.resptag;
                     iCacheBus.resp <= data_buffer;
@@ -108,10 +100,10 @@ always @ (posedge bus.clk) begin
 
             assert(!bus.respcyc) else $fatal;
 
-            if (store_ack_rec) begin
+            if (bus.reqack) begin
                 bus.req <= dCacheBus.reqdata[data_offset*8 +: 64];
                 bus.reqcyc <= 1;
-                data_offset = data_offset + 8; 
+                data_offset <= data_offset + 8; 
 
                 if (data_offset == 64) begin
                     // 64 bytes written, ready to send signal to dcache

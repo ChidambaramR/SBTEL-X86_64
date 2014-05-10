@@ -15,7 +15,18 @@ module top #(DATA_WIDTH = 64, TAG_WIDTH = 13) (
 	/* verilator lint_off UNUSED */
 	Sysbus #(DATA_WIDTH, TAG_WIDTH) uncore_bus(reset, clk);
 	SysbusBottom #(DATA_WIDTH, TAG_WIDTH) dummy(uncore_bus.Bottom, req, reqtag, resp, resptag, reqcyc, respcyc, reqack, respack);
-	Core core(entry, uncore_bus.Top);
+
+        ICoreCacheBus iCoreCacheBus(reset, clk);
+        DCoreCacheBus dCoreCacheBus(reset, clk);
+        CacheArbiterBus iCacheArbiterBus(reset, clk);
+        CacheArbiterBus dCacheArbiterBus(reset, clk);
+
+	Core core(entry, iCoreCacheBus.CorePorts, dCoreCacheBus.CorePorts);
+
+        mod_icache icache(iCoreCacheBus.CachePorts, iCacheArbiterBus.CachePorts);
+        mod_dcache dcache(dCoreCacheBus.CachePorts, dCacheArbiterBus.CachePorts);
+        mod_arbiter arbiter(uncore_bus.Top, iCacheArbiterBus.ArbiterPorts, dCacheArbiterBus.ArbiterPorts);
+
 	/* verilator lint_on UNUSED */
 	/* verilator lint_on UNDRIVEN */
 

@@ -50,20 +50,12 @@ logic [logDepth-1:0] cache_writeAddr;
 logic [bitWidth-1:0] cache_writeData;
 logic [wordsPerBlock-1:0] cache_writeEnable;
 
-SRAM #(WORDSIZE, LOGWIDTH+3, LOGDEPTH) sram_chip (
+SRAM #(WORDSIZE, bitWidth, LOGDEPTH) sram_chip (
         dCoreCacheBus.clk, cache_readAddr, cache_readData,
         cache_writeAddr, cache_writeData, cache_writeEnable
     );
 
 initial begin
-    for (i = 0; i < totalSets; i++) begin
-        set_ind <= i[logSets:1];
-        for (j = 0; j < logDepthPerSet; j++) begin
-            control[set_ind][j].valid = 0;
-        end
-    end
-    delay_counter = 0;
-    cache_writeEnable = {wordsPerBlock{1'b0}};
     $display("Initializing L1 Data Cache");
 end
 
@@ -78,6 +70,13 @@ assign dCacheArbiterBus.respack = dCacheArbiterBus.respcyc; // always able to ac
 always @ (posedge dCacheArbiterBus.clk) begin
     if (dCacheArbiterBus.reset) begin
         request_type <= no_request;
+        for (i = 0; i < totalSets; i = i+1) begin
+            set_ind <= i[logSets:1];
+            for (j = 0; j < logDepthPerSet; j = j+1) begin
+                control[set_ind][j].valid <= 0;
+            end
+        end
+        cache_writeEnable <= {wordsPerBlock{1'b0}};
 
     end else if ((request_type == no_request) && (dCoreCacheBus.reqcyc == 1)) begin
         dCoreCacheBus.reqack <= 1;
@@ -240,7 +239,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
 
             delay_counter <= 0;
         end else begin
-            delay_counter++;
+            delay_counter <= delay_counter + 1;
         end
 
     end else if (request_type == cache_write_req) begin
@@ -251,7 +250,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
             request_type <= no_request;
             delay_counter <= 0;
         end else begin
-            delay_counter++;
+            delay_counter <= delay_counter + 1;
         end
     end
 end

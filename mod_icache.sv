@@ -48,20 +48,12 @@ logic [logDepth-1:0] cache_writeAddr;
 logic [bitWidth-1:0] cache_writeData;
 logic [wordsPerBlock-1:0] cache_writeEnable;
 
-SRAM #(WORDSIZE, LOGWIDTH+3, LOGDEPTH) sram_chip (
+SRAM #(WORDSIZE, bitWidth, LOGDEPTH) sram_chip (
         iCoreCacheBus.clk, cache_readAddr, cache_readData,
         cache_writeAddr, cache_writeData, cache_writeEnable
     );
 
 initial begin
-    for (i = 0; i < totalSets; i++) begin
-        set_ind <= i[logSets:1];
-        for (j = 0; j < logDepthPerSet; j++) begin
-            control[set_ind][j].valid = 0;
-        end
-    end
-    delay_counter = 0;
-    cache_writeEnable = {wordsPerBlock{1'b0}};
     $display("Initializing L1 Instruction Cache");
 end
 
@@ -69,13 +61,20 @@ always_comb begin
     addr = iCoreCacheBus.req;
 end
 
-enum { no_request, cache_read_req, cache_write_req, memory_request} request_type;
+enum { no_request, new_request, cache_read_req, cache_write_req, memory_request} request_type;
 
 assign iCacheArbiterBus.respack = iCacheArbiterBus.respcyc; // always able to accept response
 
 always @ (posedge iCacheArbiterBus.clk) begin
     if (iCacheArbiterBus.reset) begin
         request_type <= no_request;
+        for (i = 0; i < totalSets; i = i+1) begin
+            set_ind <= i[logSets:1];
+            for (j = 0; j < logDepthPerSet; j = j+1) begin
+                control[set_ind][j].valid <= 0;
+            end
+        end
+        cache_writeEnable <= {wordsPerBlock{1'b0}};
 
     end else if ((request_type == no_request) && (iCoreCacheBus.reqcyc == 1)) begin
         iCoreCacheBus.reqack <= 1;
@@ -96,7 +95,8 @@ always @ (posedge iCacheArbiterBus.clk) begin
                 lastInvalid <= i;
             end
         end
-
+        request_type <= new_request;
+    end else if (request_type == new_request) begin
         if (match_ind == totalSets) begin
             // Cache MISS
             if (lastInvalid == totalSets) begin
@@ -108,7 +108,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
             end
             else begin
                 // Free cache block entry found
-                set_ind <= lastInvalid[logSets:1];
+                set_ind <= lastInvalid[logSets-1:0];
             end
 
             iCacheArbiterBus.req <= iCoreCacheBus.req;
@@ -118,7 +118,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
         end
         else begin
             // CACHE HIT
-            set_ind <= match_ind[logSets:1];
+            set_ind <= match_ind[logSets-1:0];
             cache_readAddr <= {set_ind, addr.index};
             cache_writeEnable <= {wordsPerBlock{1'b0}};
             
@@ -158,16 +158,17 @@ always @ (posedge iCacheArbiterBus.clk) begin
             request_type <= no_request;
             delay_counter <= 0;
         end else begin
-            delay_counter++;
+            delay_counter <= delay_counter + 1;
         end
 
     end else if (request_type == cache_write_req) begin
+        iCoreCacheBus.respcyc <= 0;
         if (delay_counter >= delay) begin
             // Data already sent to iCoreCacheBus
             request_type <= no_request;
             delay_counter <= 0;
         end else begin
-            delay_counter++;
+            delay_counter <= delay_counter + 1;
         end
     end
 end
