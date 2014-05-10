@@ -554,6 +554,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1]  mod;
 } ID_MEM;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -571,6 +572,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -585,6 +587,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 
@@ -614,12 +617,13 @@ mod_decode dec (
         // INPUT PARAMS
         jump_signal, fetch_rip, fetch_offset, decode_offset, 
         decode_bytes, opcode_group, callq_stage2, load_buffer, store_writeback, 
-        outstanding_fetch_req,
+        outstanding_fetch_req, end_prog,
         // OUTPUT PARAMS
         regfile, rflags, load_done, memex, exwb, rip, 
         jump_target, store_word, store_ins, store_opn, 
         jump_flag, data_req, data_reqAddr, bytes_decoded_this_cycle,
-      store_writebackFlag, callqFlag, rflags_seq, idmem, jump_cond_signal
+        store_writebackFlag, callqFlag, rflags_seq, idmem, jump_cond_signal,
+        end_progFlag
         );
 
 always @ (posedge bus.clk) begin
@@ -628,6 +632,8 @@ always @ (posedge bus.clk) begin
         decode_offset <= 0;
         decode_buffer <= 0;
     end else begin // !bus.reset
+        if(end_progFlag)
+            end_prog <= 1;
         if (!jump_flag)
             decode_offset <= decode_offset + { 3'b0, bytes_decoded_this_cycle };
         else begin
@@ -636,6 +642,8 @@ always @ (posedge bus.clk) begin
                 //fetch_offset <= 0;
             end
         end
+        if(jump_flag && bus.respcyc)
+                jump_signal <= 1;
 //        $display("\n\n");
 //        disp_reg_file();
 //        $display("\n\n");

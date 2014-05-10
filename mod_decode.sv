@@ -36,6 +36,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } ID_MEM;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -54,6 +55,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -69,6 +71,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 module mod_decode (
@@ -82,6 +85,7 @@ module mod_decode (
     input [0:8*8-1] load_buffer,
     input store_writeback,
     input outstanding_fetch_req,
+    input end_prog,
     
     output [0:63] regfile[0:16-1],
     output flags_reg rflags, 
@@ -101,7 +105,8 @@ module mod_decode (
     output callqFlag,
     output flags_reg rflags_seq,
     output ID_MEM idmem,
-    output jump_cond_signal
+    output jump_cond_signal,
+    output end_progFlag
 );
     
 
@@ -128,6 +133,7 @@ endfunction
 logic[0 : 63] regA_contents;
 logic[0 : 63] regB_contents;
 logic[0 : 63] imm_contents;
+logic[0 : 1]  mod_contents;
 logic[0 : 7] opcode_contents;
 logic         twob_opcode_contents;
 logic[0 : 4-1] rmByte_contents;     // 4 bit Register B INDEX for the ALU
@@ -139,6 +145,8 @@ logic sim_end_seq;               // Variable to keep track of simulation ending
 logic can_memstage;
 logic can_writeback;
 logic enable_memstage;
+
+logic end_progFlag;
 
 logic loadbuffer_done;
 logic score_board[0:16-1];
@@ -595,6 +603,7 @@ always_comb begin
     if (can_decode) begin : decode_block
         // Variables which are to be reset for each new decoding
         offset = 0;
+        mod_contents = 0;
         opcode_enc_byte = 0;
         disp_byte = 0;
         imm_byte = 0;
@@ -621,7 +630,8 @@ always_comb begin
 
         // Compute program address for next instruction
         rip = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
-
+        //if(rip == 4201971)
+        //    $finish;
         /*
          * Prefix decoding
          */
@@ -953,6 +963,7 @@ always_comb begin
                          * Case for CALLQ instruction
                          */
                         if (opcode == 255) begin
+                            end_progFlag = 1;
                             if (score_board[rmByte] == 0 && score_board[4] == 0 /* RSP */) begin
                                 if (callq_stage2) begin
                                     can_decode = 0;
@@ -1030,6 +1041,8 @@ always_comb begin
                             regA_contents = regfile[regByte];
                             regB_contents = regfile[rmByte];
                             imm_contents = {64{1'b0}};
+                            mod_contents = 3;
+                            //$write("mod = 3");
                             dependency = 2;
                         end
                         else begin
@@ -1175,9 +1188,12 @@ always_comb begin
                             regA_contents = regfile[regByte];
                             regB_contents = regfile[rmByte];
                             imm_contents = {64{1'b0}};
+                            mod_contents = 3;
+                            dependency = 2;
                         end
                         else begin
                             offset = 0;
+                            can_decode = 0;
                             enable_memstage = 0;
                         end
 
@@ -1190,13 +1206,14 @@ always_comb begin
                             reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {"%rip"}, {"), "},
                                         {reg_table_64[regByte]}};
                             if ((score_board[regByte] == 0)) begin
+                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip + offset;
                                 if(opcode == 141) begin
                                   data_reqFlag = 0;
                                   regB_contents = data_reqAddr;
+                                  //$write("regB contents = %x regByte = %x",regB_contents, regByte);
                                 end
                                 else
                                   data_reqFlag = 1; 
-                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip + offset;
                                 regByte_contents = regByte;
                                 rmByte_contents = regByte; // We need dep = 1 and regByte to be score boarded.
                                           // By default, if dep = 1, only regfile[rmByte] will be score boarded.
@@ -1256,21 +1273,42 @@ always_comb begin
                         /*
                         * The displacement value is SIGN extended
                         */
-                        signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
-                        reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
+                        if(opcode == 141) begin
+                            signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                            reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
                                         {"), "}, {reg_table_64[regByte]}};
-                        if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                            if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
+                                data_reqFlag = 0;
+                                data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
+                                regB_contents = data_reqAddr;
+                                regByte_contents = regByte;
+                                rmByte_contents = rmByte;
+                                //$write("here opcode = %x, dataa = %x, regb = %x, rmb = %x",opcode, data_reqAddr, regByte_contents, rmByte);
+                                dependency = 2;
+                            end
+                            else begin
+                                offset = 0;
+                                can_decode = 0;
+                                enable_memstage = 0;
+                            end
+                        end
+                        else begin
+                            signed_disp_byte = {{56{short_disp_byte[0]}}, {short_disp_byte}};
+                            reg_buffer[0:247] = {{"$0x"}, {byte8_to_str(signed_disp_byte)}, {"("}, {reg_table_64[rmByte]},
+                                        {"), "}, {reg_table_64[regByte]}};
+                            if ((score_board[rmByte] == 0) && (score_board[regByte] == 0)) begin
                                 data_reqFlag = 1;
                                 data_reqAddr = regfile[rmByte] - (~signed_disp_byte + 1);
                                 regByte_contents = regByte;
                                 rmByte_contents = rmByte;
                                 //$write("here opcode = %x, dataa = %x, regb = %x, rmb = %x",opcode, data_reqAddr, regByte_contents, rmByte);
                                 dependency = 2;
-                        end
-                        else begin
+                            end
+                            else begin
                                 offset = 0;
                                 can_decode = 0;
                                 enable_memstage = 0;
+                            end
                         end
                     end
                     else begin
@@ -1414,6 +1452,7 @@ always_comb begin
                     reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                     if(opcode == 232) begin
                         // Callq instruction
+                        end_progFlag = 1;
                         if (score_board[regByte] == 0 /* RSP */) begin
                             if (callq_stage2) begin
                                 can_decode = 0;
@@ -1470,35 +1509,39 @@ always_comb begin
 
         // Note: Currently we finish on retq instruction. Later we might want to change below condition.
         if (instr_buffer == "retq    ") begin
-            if (score_board[4] == 0 /* RSP */) begin
-                if (callq_stage2) begin
-                    can_decode = 0;
-                    bytes_decoded_this_cycle = 0;
-                    enable_memstage = 0;
-                    jump_flag = 1; // Unconditional jump
-                    jump_target = load_buffer;
-                    //$write("load buffer = %x",load_buffer);
-                    callqFlag = 0;
-                    //$finish;
+            if(!end_prog)
+                sim_end_signal = 1;
+            else begin
+                if (score_board[4] == 0 /* RSP */) begin
+                    if (callq_stage2) begin
+                        can_decode = 0;
+                        bytes_decoded_this_cycle = 0;
+                        enable_memstage = 0;
+                        jump_flag = 1; // Unconditional jump
+                        jump_target = load_buffer;
+                        //$write("load buffer = %x",load_buffer);
+                        callqFlag = 0;
+                        //$finish;
+                    end
+                    else begin
+                        callqFlag = 1;
+                        regByte = 4; // Its not used anyways as CALLQ uses only 1.
+                        rmByte = 4;
+                        regByte_contents = regByte;
+                        rmByte_contents = rmByte;
+                        //$write("caught for retq RSP = %x", regfile[4]);
+                        dependency = 1;
+                        data_reqFlag = 1;
+                        data_reqAddr = regfile[regByte]; 
+                        offset = 0;
+                        //$finish;
+                    end
                 end
                 else begin
-                    callqFlag = 1;
-                    regByte = 4; // Its not used anyways as CALLQ uses only 1.
-                    rmByte = 4;
-                    regByte_contents = regByte;
-                    rmByte_contents = rmByte;
-                    //$write("caught for retq RSP = %x", regfile[4]);
-                    dependency = 1;
-                    data_reqFlag = 1;
-                    data_reqAddr = regfile[regByte]; 
+                    can_decode = 0;
                     offset = 0;
-                    //$finish;
+                    enable_memstage = 0;
                 end
-            end
-            else begin
-                can_decode = 0;
-                offset = 0;
-                enable_memstage = 0;
             end
             //$finish;
             //sim_end_signal = 1; // Simulation should end
@@ -1509,12 +1552,12 @@ always_comb begin
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
         if ((instr_buffer != empty_str) && can_decode) begin
-            $write("  %0h:    ", rip);
-            print_prog_bytes(space_buffer, offset);
-            $write("%s%s\n", instr_buffer, reg_buffer);
-        //$display("\n");
-        //disp_reg_file();
-        //$display("\n");
+//            $write("  %0h:    ", rip);
+//            print_prog_bytes(space_buffer, offset);
+//            $write("%s%s\n", instr_buffer, reg_buffer);
+//        $display("\n");
+//        disp_reg_file();
+//        $display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1551,7 +1594,7 @@ end
 mod_memstage mem (
         // INPUT PARAMS
         can_memstage, load_buffer, idmem, store_memstage_active, 
-        store_ins, store_opn, opcode_group, rflags_seq,
+        store_ins, store_opn, opcode_group, rflags_seq, end_prog,
         //OUTPUT PARAMS
         can_writeback, loadbuffer_done, data_reqFlag, store_reqFlag, 
         store_writebackFlag, jump_flag, jump_cond_flag, memstage_active, 
@@ -1611,6 +1654,7 @@ always @ (posedge bus.clk) begin
             idmem.ctl_regByte <= regByte_contents;
             idmem.ctl_dep <= dependency;
             idmem.sim_end <= sim_end_signal;
+            idmem.mod <= mod_contents;
             can_memstage <= 1;
             if (data_reqFlag) begin
                 data_req <= 1;

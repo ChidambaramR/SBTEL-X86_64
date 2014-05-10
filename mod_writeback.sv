@@ -4,6 +4,8 @@ module mod_writeback (
     /* verilator lint_off UNUSED */
     input EX_WB exwb,
     input store_memstage_active,
+    input end_prog,
+
     output [0:63] regfile[0:16-1],
     output [0:1]  dep_exwb,
     output store_writebackFlag
@@ -22,6 +24,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 always_comb begin
@@ -33,9 +36,14 @@ always_comb begin
             // Do nothing
         end
 
-        else if (exwb.ctl_opcode == 247) begin
-            regfile[0] = exwb.alu_result;
-            regfile[2] = exwb.alu_ext_result;
+        else if ((exwb.ctl_opcode == 247) || ((memex.ctl_opcode == 175) && (memex.twob_opcode == 1))) begin
+            //IMUL
+            if(exwb.ctl_opcode == 247)
+              regfile[0] = exwb.alu_result;
+            else
+              regfile[exwb.ctl_regByte] = exwb.alu_result;
+            if(exwb.alu_ext_result)
+              regfile[2] = exwb.alu_ext_result;
         end
 
         else if(exwb.ctl_opcode == 5) begin
@@ -49,10 +57,15 @@ always_comb begin
             store_writebackFlag = 1;
         end
 
-        else if (exwb.ctl_opcode == 195) begin
+        else if (exwb.ctl_opcode == 195 && end_prog) begin
             // RETQ
             //$write("Write for retq");
             regfile[4] = regfile[4] + 8;
+        end
+
+        else if (exwb.ctl_opcode == 195 && !end_prog) begin
+            // RETQ without CallQ.
+            //Do nothing
         end
 
         else if(exwb.twob_opcode == 1) begin
@@ -83,11 +96,16 @@ always_comb begin
             end
         end
 
-        else if (exwb.ctl_opcode == 137 && store_memstage_active) begin
-            //$write("here!! wr opcode = %x", exwb.ctl_opcode);
+        else if (exwb.ctl_opcode == 137 && store_memstage_active && exwb.mod !=3) begin
             // STORE INS
             store_writebackFlag = 1;
         end
+        
+        else if (exwb.ctl_opcode == 137 && exwb.mod == 3) begin
+            //$write("wb to %x from %x",exwb.ctl_rmByte, exwb.alu_result);
+            regfile[exwb.ctl_rmByte] = exwb.alu_result;
+        end
+
         else if (exwb.ctl_opcode == 139 || (exwb.ctl_opcode == 141 && !exwb.twob_opcode)) begin
             // LOAD INS
           //$write("LD %x into %x",exwb.alu_result, exwb.ctl_regByte);

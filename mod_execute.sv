@@ -18,6 +18,7 @@ module mod_execute (
     input store_memstage_active,
     input [0:255][0:0][0:3] opcode_group,
     input flags_reg rflags_seq,
+    input end_prog, 
     
     output memstage_active,
     output load_done,
@@ -69,6 +70,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -84,17 +86,20 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 // Temporary values to be given to the EXWB pipeline register
 logic [0:63] rip_exwb;
 logic [0:1]  dep_exwb;
+logic [0:1]  mod_exwb;
 logic sim_end_signal_exwb;
 logic[0 : 63] alu_result_exwb;
 logic[0 : 63] alu_ext_result_exwb;
 logic[0 : 4-1] regByte_contents_exwb;
 logic[0 : 4-1] rmByte_contents_exwb;
 logic[0 : 8-1] opcode_exwb;
+logic[0 : 63] temp_regA;
 
 logic[0 : 127] data_regAA;
 logic[0 : 127] data_regBB;
@@ -108,12 +113,13 @@ always_comb begin
     if (can_execute) begin : execute_block
 
         dep_exwb = memex.ctl_dep;
+        mod_exwb = memex.mod;
         sim_end_signal_exwb = memex.sim_end;
         rmByte_contents_exwb = memex.ctl_rmByte;
         opcode_exwb = memex.ctl_opcode;
         //$write("twob opcode = %x",memex.twob_opcode);
         //$write("Opcode at execute stage = %x",memex.ctl_opcode);
-        if (dep_exwb == 2 || memex.ctl_opcode == 139) begin
+        if (dep_exwb == 2 || memex.ctl_opcode == 139 || memex.ctl_opcode == 141) begin
             regByte_contents_exwb = memex.ctl_regByte;
         end
       
@@ -172,11 +178,35 @@ always_comb begin
 //          rflags.jge = 0;
         end
 
+        else if ((memex.ctl_opcode == 142 && memex.twob_opcode == 1)) begin
+            // JLE instructionn
+          jump_cond_flag = 0;
+          if(rflags_seq.jge == 0 && rflags_seq.jg == 0) begin
+              jump_flag = 1;
+          end
+        end
+
+        else if ((memex.ctl_opcode == 131 && memex.twob_opcode == 1)) begin
+            // JAE instruction
+            jump_cond_flag = 0;
+            if(rflags_seq.jge == 1) begin
+                jump_flag = 1;
+            end
+        end
+
         else if ((memex.ctl_opcode == 143 && memex.twob_opcode == 1)) begin
-            // JGE instruction and JNL instruction
+            // JG instruction 
           jump_cond_flag = 0;
           //$write("jge: %x",rflags_seq.jge);
           if(rflags_seq.jg == 1 && rflags_seq.zf == 0) begin
+              jump_flag = 1;
+          end
+        end
+
+        else if ((memex.ctl_opcode == 140 && memex.twob_opcode == 1)) begin
+            // JL instructionn
+          jump_cond_flag = 0;
+          if(rflags_seq.jge == 0 && rflags_seq.jg == 0 && rflags_seq.zf == 0) begin
               jump_flag = 1;
           end
         end
@@ -195,6 +225,15 @@ always_comb begin
           end
         end
 
+        else if ((memex.ctl_opcode == 133 && memex.twob_opcode == 0)) begin
+            // TEST instruction
+            //$write("regA = %x, regB = %x",memex.data_regA, memex.data_regB);
+            if( memex.data_regA & memex.data_regB )
+                rflags.zf = 0; // Not equal
+            else
+                rflags.zf = 1; // Equal
+        end
+
 
         else if (memex.ctl_opcode == 49) begin
           alu_result_exwb = memex.data_regA ^ memex.data_regB;
@@ -205,12 +244,16 @@ always_comb begin
         else if (memex.ctl_opcode == 116 || memex.ctl_opcode == 132) begin
             // JE instruction
             jump_cond_flag = 0;
-            $write("zf = %x",rflags_seq.zf);
+            //$write("zf = %x",rflags_seq.zf);
             if (rflags_seq.zf == 1) begin
               jump_flag = 1; // Zero flag is set for JE instruction.
-              $write("Conditional jump");
+             // $write("Conditional jump");
             end
             //rflags.zf = 0;
+        end
+
+        else if (memex.ctl_opcode == 137 && memex.mod == 3) begin // Move reg to reg
+            alu_result_exwb = regfile[memex.ctl_regByte];
         end
 
         else if (memex.ctl_opcode == 137 && !store_memstage_active) begin // Move reg to reg
@@ -276,28 +319,25 @@ always_comb begin
                 else
                     rflags.zf = 0;
 
-                if(memex.data_regA >= memex.data_imm) begin
-                    //$write("setting 1");
-                    rflags.jge = 1;
-                    rflags.jg = 1;
-                end
-                else begin
+                if(memex.data_regA[0] == 1) begin
+                    // Signed
+                    // HACK. If it reaches here, value is regA is always assumed as less than imm
+                        // for this project. Will fail elsewhere
                     rflags.jge = 0;
                     rflags.jg = 0;
-                    rflags.zf = 0;
-                end
-                /*else if((memex.data_regA > memex.data_imm) && !rflags.jge) begin
-                    rflags.jg = 1;
-                    //rflags.zf = 0;
-                    rflags.jge = 0;
-                    $write("jg = %x jge = %x",rflags.jg, rflags.jge);
                 end
                 else begin
-                    //$write("setting 0 imm %x regA %x", memex.data_imm, memex.data_regA);
- //                   $finish;
-                end*/
-
-                //$write("0 flag is set %x, %x, %x",rflags.zf, memex.data_regA, memex.data_imm);
+                    if(memex.data_regA >= memex.data_imm) begin
+                        //$write("setting 1");
+                        rflags.jge = 1;
+                        rflags.jg = 1;
+                    end
+                    else begin
+                        rflags.jge = 0;
+                        rflags.jg = 0;
+                        rflags.zf = 0;
+                    end
+                end
             end
         end
 
@@ -317,6 +357,17 @@ always_comb begin
         else if (memex.ctl_opcode == 1 ) begin
             // Add instruction 
             alu_result_exwb = memex.data_regA + memex.data_regB;;
+        end
+
+        else if ((memex.ctl_opcode == 175) && (memex.twob_opcode == 1)) begin
+            data_regAA = {{64{memex.data_regB[0]}}, memex.data_regB}; 
+            data_regBB = {{64{memex.data_regA[0]}}, memex.data_regA};
+            
+            // 128 bit multiplication
+            temp16 = data_regAA * data_regBB;
+            // Store result into RDX:RAX
+            alu_ext_result_exwb = temp16[0:63];
+            alu_result_exwb = temp16[64:127];
         end
 
         else if (memex.ctl_opcode == 247 ) begin
@@ -374,7 +425,7 @@ end
 
 mod_writeback rb (
         // INPUT PARAMS
-        can_writeback, exwb, store_memstage_active,
+        can_writeback, exwb, store_memstage_active, end_prog,
         // OUTPUT PARAMS
         regfile, dep_exwb, store_writebackFlag
     );
@@ -399,7 +450,8 @@ always @ (posedge bus.clk) begin
             exwb.ctl_regByte <= regByte_contents_exwb;
             exwb.sim_end <= sim_end_signal_exwb; 
             exwb.ctl_opcode <= opcode_exwb;
-            exwb.twob_opcode <= memex.twob_opcode; 
+            exwb.twob_opcode <= memex.twob_opcode;
+            exwb.mod <= mod_exwb;
             //$write("rmByte %0h regByte %0h dep EXWB %0h",rmByte_contents_exwb, regByte_contents_exwb, dep_exwb);
             score_board[rmByte_contents_exwb] <= 0;
             if (dep_exwb == 2) begin

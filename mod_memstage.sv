@@ -9,6 +9,7 @@ module mod_memstage(
     input store_opn,
     input [0:255][0:0][0:3] opcode_group,
     input flags_reg rflags_seq,
+    input end_prog,
 
     output can_writeback,
     output loadbuffer_done,
@@ -64,6 +65,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } ID_MEM;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -82,6 +84,7 @@ typedef struct packed {
     logic [0:3]  ctl_rmByte;
     logic [0:1]  ctl_dep;
     logic sim_end;
+    logic [0:1] mod;
 } MEM_EX;
 
 // Refer to slide 11 of 43 in CSE502-L4-Pipelining.pdf
@@ -97,6 +100,7 @@ typedef struct packed {
     logic [0:3]  ctl_regByte;
     logic [0:3]  ctl_rmByte;
     logic sim_end;
+    logic [0:1] mod;
 } EX_WB;
 
 // Temporary values which will be stored in the MEMEX pipeline register
@@ -104,6 +108,7 @@ logic [0:63] rip_memex;
 logic [0:63] regA_contents_memex;
 logic [0:63] regB_contents_memex;
 logic [0:63] imm_contents_memex;
+logic [0:1]  mod_contents_memex;
 logic [0:7] opcode_contents_memex;
 logic       twob_opcode_contents_memex;
 logic [0:4-1] rmByte_contents_memex;     // 4 bit Register B INDEX for the ALU
@@ -127,6 +132,7 @@ always_comb begin
             dependency_memex       = idmem.ctl_dep;
             sim_end_signal_memex   = idmem.sim_end;
             twob_opcode_contents_memex = idmem.twob_opcode;
+            mod_contents_memex     = idmem.mod;
             enable_execute = 1;
         end
         else begin
@@ -144,6 +150,7 @@ always_comb begin
                   twob_opcode_contents_memex = idmem.twob_opcode;
                   loadbuffer_done = 1;
                   enable_execute = 1;
+                  mod_contents_memex     = idmem.mod;
                   data_reqFlag = 0;
                   // Got the load value. Should feed this in the pipeline
                   //$finish;
@@ -162,6 +169,7 @@ always_comb begin
                     dependency_memex       = idmem.ctl_dep;
                     store_reqFlag = 0;
                     enable_execute = 1;
+                    mod_contents_memex     = idmem.mod;
                 end
                 else
                   enable_execute = 0;
@@ -178,7 +186,7 @@ end
 mod_execute ex (
         // INPUT PARAMS
         enable_execute, loadbuffer_done, load_buffer, 
-        store_memstage_active, opcode_group, rflags_seq, 
+        store_memstage_active, opcode_group, rflags_seq, end_prog,
         //OUTPUT PARAMS
         memstage_active, load_done, can_execute, can_writeback,
         store_writebackFlag, jump_flag, jump_cond_flag, 
@@ -207,6 +215,7 @@ always @ (posedge bus.clk) begin
             memex.ctl_regByte <= regByte_contents_memex;
             memex.ctl_dep <= dependency_memex;
             memex.sim_end <= sim_end_signal_memex;
+            memex.mod  <= mod_contents_memex;
             if (loadbuffer_done) begin
                 //load_done <= 0;
                 memstage_active <= 0;
