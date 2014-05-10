@@ -1,12 +1,12 @@
 /* verilator lint_off UNDRIVEN */
 /* verilator lint_off UNUSED */
-interface CacheArbiterBus #(DATA_WIDTH = 512, ADDRESS = 64, TAG_WIDTH = 13) (
+interface ICoreCacheBus #(DATA_WIDTH = 512, ADDRESS = 64, TAG_WIDTH = 13) (
     input reset,
     input clk
 );
 
 wire[ADDRESS-1:0] req;
-wire[DATA_WIDTH-1:0] reqdata; // Used for Storing into Memory
+wire[DATA_WIDTH-1:0] reqdata;
 wire[TAG_WIDTH-1:0] reqtag;
 wire[DATA_WIDTH-1:0] resp;
 wire[TAG_WIDTH-1:0] resptag;
@@ -23,7 +23,7 @@ parameter
     PORT    /* verilator public */ = 4'b0100,
     IRQ	    /* verilator public */ = 4'b1110;
 
-modport ArbiterPorts (
+modport CachePorts (
     input reset,
     input clk,
     input req,
@@ -37,7 +37,7 @@ modport ArbiterPorts (
     input respack
 );
 
-modport CachePorts (
+modport CorePorts (
     input reset,
     input clk,
     output req,

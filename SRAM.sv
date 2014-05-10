@@ -1,4 +1,4 @@
-module SRAM (
+module SRAM #(WORDSIZE = 64, LOGWIDTH = 9, LOGDEPTH = 9) (
         input clk,
         input [logDepth-1:0] readAddr,
         output [ width-1:0] readData,
@@ -6,9 +6,9 @@ module SRAM (
         input [ width-1:0] writeData,
         input [width/wordsize-1:0] writeEnable
     );
-parameter width = 512,
-          logDepth = 7,
-          wordsize = 64,
+parameter width = 1 >> LOGWIDTH,
+          logDepth = LOGDEPTH,
+          wordsize = WORDSIZE,
           ports = 1,
           delay = (logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
 
