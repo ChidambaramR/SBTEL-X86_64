@@ -4,6 +4,8 @@ module mod_writeback (
     /* verilator lint_off UNUSED */
     input EX_WB exwb,
     input store_memstage_active,
+    input end_prog,
+
     output [0:63] regfile[0:16-1],
     output [0:1]  dep_exwb,
     output store_writebackFlag
@@ -36,7 +38,10 @@ always_comb begin
 
         else if ((exwb.ctl_opcode == 247) || ((memex.ctl_opcode == 175) && (memex.twob_opcode == 1))) begin
             //IMUL
-            regfile[exwb.ctl_regByte] = exwb.alu_result;
+            if(exwb.ctl_opcode == 247)
+              regfile[0] = exwb.alu_result;
+            else
+              regfile[exwb.ctl_regByte] = exwb.alu_result;
             if(exwb.alu_ext_result)
               regfile[2] = exwb.alu_ext_result;
         end
@@ -52,10 +57,15 @@ always_comb begin
             store_writebackFlag = 1;
         end
 
-        else if (exwb.ctl_opcode == 195) begin
+        else if (exwb.ctl_opcode == 195 && end_prog) begin
             // RETQ
             //$write("Write for retq");
             regfile[4] = regfile[4] + 8;
+        end
+
+        else if (exwb.ctl_opcode == 195 && !end_prog) begin
+            // RETQ without CallQ.
+            //Do nothing
         end
 
         else if(exwb.twob_opcode == 1) begin

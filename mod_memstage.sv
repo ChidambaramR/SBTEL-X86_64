@@ -9,6 +9,7 @@ module mod_memstage(
     input store_opn,
     input [0:255][0:0][0:3] opcode_group,
     input flags_reg rflags_seq,
+    input end_prog,
 
     output can_writeback,
     output loadbuffer_done,
@@ -185,7 +186,7 @@ end
 mod_execute ex (
         // INPUT PARAMS
         enable_execute, loadbuffer_done, load_buffer, 
-        store_memstage_active, opcode_group, rflags_seq, 
+        store_memstage_active, opcode_group, rflags_seq, end_prog,
         //OUTPUT PARAMS
         memstage_active, load_done, can_execute, can_writeback,
         store_writebackFlag, jump_flag, jump_cond_flag, 

@@ -85,6 +85,7 @@ module mod_decode (
     input [0:8*8-1] load_buffer,
     input store_writeback,
     input outstanding_fetch_req,
+    input end_prog,
     
     output [0:63] regfile[0:16-1],
     output flags_reg rflags, 
@@ -104,7 +105,8 @@ module mod_decode (
     output callqFlag,
     output flags_reg rflags_seq,
     output ID_MEM idmem,
-    output jump_cond_signal
+    output jump_cond_signal,
+    output end_progFlag
 );
     
 
@@ -143,6 +145,8 @@ logic sim_end_seq;               // Variable to keep track of simulation ending
 logic can_memstage;
 logic can_writeback;
 logic enable_memstage;
+
+logic end_progFlag;
 
 logic loadbuffer_done;
 logic score_board[0:16-1];
@@ -959,6 +963,7 @@ always_comb begin
                          * Case for CALLQ instruction
                          */
                         if (opcode == 255) begin
+                            end_progFlag = 1;
                             if (score_board[rmByte] == 0 && score_board[4] == 0 /* RSP */) begin
                                 if (callq_stage2) begin
                                     can_decode = 0;
@@ -1447,6 +1452,7 @@ always_comb begin
                     reg_buffer[0:151] = {{"$0x"}, {byte8_to_str(temp_crr)}};
                     if(opcode == 232) begin
                         // Callq instruction
+                        end_progFlag = 1;
                         if (score_board[regByte] == 0 /* RSP */) begin
                             if (callq_stage2) begin
                                 can_decode = 0;
@@ -1503,35 +1509,39 @@ always_comb begin
 
         // Note: Currently we finish on retq instruction. Later we might want to change below condition.
         if (instr_buffer == "retq    ") begin
-            if (score_board[4] == 0 /* RSP */) begin
-                if (callq_stage2) begin
-                    can_decode = 0;
-                    bytes_decoded_this_cycle = 0;
-                    enable_memstage = 0;
-                    jump_flag = 1; // Unconditional jump
-                    jump_target = load_buffer;
-                    //$write("load buffer = %x",load_buffer);
-                    callqFlag = 0;
-                    //$finish;
+            if(!end_prog)
+                sim_end_signal = 1;
+            else begin
+                if (score_board[4] == 0 /* RSP */) begin
+                    if (callq_stage2) begin
+                        can_decode = 0;
+                        bytes_decoded_this_cycle = 0;
+                        enable_memstage = 0;
+                        jump_flag = 1; // Unconditional jump
+                        jump_target = load_buffer;
+                        //$write("load buffer = %x",load_buffer);
+                        callqFlag = 0;
+                        //$finish;
+                    end
+                    else begin
+                        callqFlag = 1;
+                        regByte = 4; // Its not used anyways as CALLQ uses only 1.
+                        rmByte = 4;
+                        regByte_contents = regByte;
+                        rmByte_contents = rmByte;
+                        //$write("caught for retq RSP = %x", regfile[4]);
+                        dependency = 1;
+                        data_reqFlag = 1;
+                        data_reqAddr = regfile[regByte]; 
+                        offset = 0;
+                        //$finish;
+                    end
                 end
                 else begin
-                    callqFlag = 1;
-                    regByte = 4; // Its not used anyways as CALLQ uses only 1.
-                    rmByte = 4;
-                    regByte_contents = regByte;
-                    rmByte_contents = rmByte;
-                    //$write("caught for retq RSP = %x", regfile[4]);
-                    dependency = 1;
-                    data_reqFlag = 1;
-                    data_reqAddr = regfile[regByte]; 
+                    can_decode = 0;
                     offset = 0;
-                    //$finish;
+                    enable_memstage = 0;
                 end
-            end
-            else begin
-                can_decode = 0;
-                offset = 0;
-                enable_memstage = 0;
             end
             //$finish;
             //sim_end_signal = 1; // Simulation should end
@@ -1542,12 +1552,12 @@ always_comb begin
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
         if ((instr_buffer != empty_str) && can_decode) begin
-            //$write("  %0h:    ", rip);
-            //print_prog_bytes(space_buffer, offset);
-            //$write("%s%s\n", instr_buffer, reg_buffer);
-        //$display("\n");
-        //disp_reg_file();
-        //$display("\n");
+//            $write("  %0h:    ", rip);
+//            print_prog_bytes(space_buffer, offset);
+//            $write("%s%s\n", instr_buffer, reg_buffer);
+//        $display("\n");
+//        disp_reg_file();
+//        $display("\n");
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1584,7 +1594,7 @@ end
 mod_memstage mem (
         // INPUT PARAMS
         can_memstage, load_buffer, idmem, store_memstage_active, 
-        store_ins, store_opn, opcode_group, rflags_seq,
+        store_ins, store_opn, opcode_group, rflags_seq, end_prog,
         //OUTPUT PARAMS
         can_writeback, loadbuffer_done, data_reqFlag, store_reqFlag, 
         store_writebackFlag, jump_flag, jump_cond_flag, memstage_active, 

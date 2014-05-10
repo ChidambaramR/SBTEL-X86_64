@@ -18,6 +18,7 @@ module mod_execute (
     input store_memstage_active,
     input [0:255][0:0][0:3] opcode_group,
     input flags_reg rflags_seq,
+    input end_prog, 
     
     output memstage_active,
     output load_done,
@@ -424,7 +425,7 @@ end
 
 mod_writeback rb (
         // INPUT PARAMS
-        can_writeback, exwb, store_memstage_active,
+        can_writeback, exwb, store_memstage_active, end_prog,
         // OUTPUT PARAMS
         regfile, dep_exwb, store_writebackFlag
     );
