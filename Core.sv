@@ -46,29 +46,6 @@ logic callq_stage2;
 
 logic [0:63] data_reqAddr;
 
-function logic[0 : 8*8-1] byte8_swap(logic[0 : 8*8-1] inp);
-      logic[0 : 8*8-1] ret_val;
-      integer ii;
-
-      for (ii = 0; ii < 8; ii++) begin
-          ret_val[ii*8 +: 8] = inp[(7-ii)*8 +: 8];
-      end  
-
-      byte8_swap = ret_val;
-endfunction
-
-function logic[0 : 64*8-1] byte64_swap(logic[0 : 64*8-1] inp);
-      logic[0 : 64*8-1] ret_val;
-      integer ii;
-
-      for (ii = 0; ii < 64; ii++) begin
-          ret_val[ii*8 +: 8] = inp[(63-ii)*8 +: 8];
-      end  
-
-      byte64_swap = ret_val;
-endfunction
-
-
 initial begin
     // Initial value of RSP from mailing list
 
@@ -216,7 +193,7 @@ always @ (posedge bus.clk) begin
                     databus.reqcyc <= 1;
                     databus.reqtag <= { databus.WRITE, databus.MEMORY, {6'b0,1'b1,1'b1}};
                     store_writeback <= 0;
-                    databus.reqdata <= byte64_swap(data_buffer[0 : 64*8-1]);
+                    databus.reqdata <= data_buffer[0 : 64*8-1];
                     store_opn <= 0;
                     store_done <= 0;
                     if (callqFlag)
@@ -402,11 +379,11 @@ always @ (posedge bus.clk) begin
                  * A jump is found and we need to resteer the fetch
                  */
                 if (!outstanding_fetch_req) begin
-                fetch_rip <= (jump_target & ~63);
-                decode_buffer <= 0;
-                /* verilator lint_off WIDTH */
-                fetch_skip <= ((jump_target[58:63])&(~7)) + ((jump_target[58:63])&(7));
-                //fetch_offset <= 0;
+                    fetch_rip <= (jump_target & ~63);
+                    decode_buffer <= 0;
+                    /* verilator lint_off WIDTH */
+                    fetch_skip <= ((jump_target[58:63])&(~7)) + ((jump_target[58:63])&(7));
+                    //fetch_offset <= 0;
                 end
                 jump_signal <= 1;
                 if(callq_stage2)
@@ -446,9 +423,11 @@ always @ (posedge bus.clk) begin
             fetch_state <= fetch_active;
             if (!store_ins) begin
                 if(!load_done) begin
-                    load_buffer[0 : 63] <= byte8_swap(databus.resp[fetch_data_skip +: 64]);
+                    //$write("fetch_data_skip: %x $$ %x \n", fetch_data_skip, databus.resp[(64-fetch_data_skip)*8-1 -: 64]);
+                    //load_buffer[0 : 63] <= byte8_swap(databus.resp[fetch_data_skip +: 64]);
+                    load_buffer[0 : 63] <= databus.resp[(64-fetch_data_skip)*8-1 -: 64];
                     load_done <= 1;
-                    if(callqFlag)
+                    if (callqFlag)
                         callq_stage2 <= 1;
                 end
             end
@@ -456,8 +435,9 @@ always @ (posedge bus.clk) begin
                 // This is the flag which controls whether STORE operation has completed or not. If 0, not complete
                 // We are begining the STORE operation.
                 // We are here for a STORE instruction
-                data_buffer[0 : 64*8-1] <= byte64_swap(databus.resp);
-                data_buffer[fetch_store_skip +: 64] <= store_word;
+                //$write("fetch_store_skip: %x $$ %x  \n", fetch_store_skip, databus.resp);
+                data_buffer[0 : 64*8-1] <= databus.resp;
+                data_buffer[fetch_store_skip*8 +: 64] <= store_word;
                 /*
                  * We have finished getting the contents in the data buffer. Now put the change buffer
                  * in the corresponding place.

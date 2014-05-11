@@ -17,6 +17,17 @@ initial begin
     $display("Initializing Arbiter Module");
 end
 
+function logic[0 : 8*8-1] byte8_swap(logic[0 : 8*8-1] inp);
+      logic[0 : 8*8-1] ret_val;
+      integer ii;
+
+      for (ii = 0; ii < 8; ii++) begin
+          ret_val[ii*8 +: 8] = inp[(7-ii)*8 +: 8];
+      end  
+
+      byte8_swap = ret_val;
+endfunction
+
 assign bus.respack = bus.respcyc; // always able to accept response
 
 always @ (posedge bus.clk) begin
@@ -81,7 +92,7 @@ always @ (posedge bus.clk) begin
             dCacheBus.reqack <= 0;
 
             if (bus.respcyc) begin
-                data_buffer[data_offset*8 +: 64] <= bus.resp;
+                data_buffer[data_offset*8 +: 64] <= byte8_swap(bus.resp);
                 data_offset <= data_offset + 8;
 
                 if (data_offset >= 56) begin
@@ -104,7 +115,7 @@ always @ (posedge bus.clk) begin
             assert(!bus.respcyc) else $fatal;
 
             if (bus.reqack) begin
-                bus.req <= dCacheBus.reqdata[data_offset*8 +: 64];
+                bus.req <= byte8_swap(dCacheBus.reqdata[data_offset*8 +: 64]);
                 bus.reqcyc <= 1;
                 data_offset <= data_offset + 8; 
 

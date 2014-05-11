@@ -17,7 +17,7 @@ parameter logWidth  = LOGWIDTH,
           i_index   = i_offset - logWidth,
           i_tag     = i_index  - logDepthPerSet, 
           ports = 1,
-          delay = (logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
+          delay = 1;//(logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
 
 typedef struct packed {
     logic [i_tag    : 0        ] tag;           //    Tag bit positions = 50:0
@@ -135,7 +135,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
             iCoreCacheBus.resptag <= iCacheArbiterBus.resptag;
             iCoreCacheBus.respcyc <= 1;
 
-        $write("\n icache: %x $$ %x $$ %x $$ %x\n",  iCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n icache: %x $$ %x $$ %x $$ %x\n",  iCoreCacheBus.req, addr.tag, addr.index, addr.offset);
             // Also setup new cache block entry and write new block to cache
             control[set_ind][addr.index].tag <= addr.tag;
             control[set_ind][addr.index].valid <= 1;
@@ -161,7 +161,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
         end
 
     end else if (request_type == cache_write_req) begin
-    $write("\n icache2: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
+    //$write("\n icache2: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
         iCoreCacheBus.respcyc <= 0;
 
         if (delay_counter >= delay) begin
