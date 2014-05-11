@@ -1,4 +1,4 @@
-module mod_icache #(WORDSIZE = 64, LOGWIDTH = 6, LOGDEPTH = 9, LOGSETS = 2) (
+module mod_icache #(WORDSIZE = 64, LOGWIDTH = 6, LOGDEPTH = 9, LOGSETS = 2, TAGWIDTH = 13) (
     ICoreCacheBus    iCoreCacheBus,
     CacheArbiterBus iCacheArbiterBus
 );
@@ -135,7 +135,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
             iCoreCacheBus.resptag <= iCacheArbiterBus.resptag;
             iCoreCacheBus.respcyc <= 1;
 
-        $write("\n cache: %x $$ %x $$ %x $$ %x\n",  iCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        $write("\n icache: %x $$ %x $$ %x $$ %x\n",  iCoreCacheBus.req, addr.tag, addr.index, addr.offset);
             // Also setup new cache block entry and write new block to cache
             control[set_ind][addr.index].tag <= addr.tag;
             control[set_ind][addr.index].valid <= 1;
@@ -161,7 +161,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
         end
 
     end else if (request_type == cache_write_req) begin
-        $write("\n cache2: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
+    $write("\n icache2: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
         iCoreCacheBus.respcyc <= 0;
 
         if (delay_counter >= delay) begin

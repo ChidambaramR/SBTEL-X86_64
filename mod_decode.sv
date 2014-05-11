@@ -983,7 +983,7 @@ always_comb begin
                                     regByte_contents = regByte;
                                     rmByte_contents = rmByte;
                                     data_reqAddr = regfile[regByte] - 8;
-                                    store_word = rip + 3;
+                                    store_word = rip + 2;
                                     //$write("caught for callq RSP = %x word = %x reg %x, rm %x", data_reqAddr, store_word, regByte, rmByte);
                                     // can_decode = 0;
                                     dependency = 2;
