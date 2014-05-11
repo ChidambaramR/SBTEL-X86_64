@@ -24,7 +24,7 @@ logic store_writebackFlag;
 logic store_done;
 logic sending_data;
 logic store_opn;
-logic store_ack_received;
+logic clflush_signal;
 
 logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
 logic[5:0] fetch_skip;
@@ -61,11 +61,6 @@ initial begin
     regfile[4] = 31744;  // WARNING. Change it to 0x7C00 after Varun's fix
     //regfile[6] = 1;
     callqFlag = 0;
-
-    store_ack_received = 0;
-    //for (j = 0; j <= 14; j++) begin
-    //    score_board[j] = 0;
-    //end
 
     /*
      * Group of Shared opcode
@@ -154,8 +149,11 @@ always @ (posedge bus.clk) begin
         if (store_writebackFlag)
             store_writeback <= 1;
 
-          if (store_opn == 0)
+        if (store_opn == 0)
             sending_data <= 0;
+        
+        if (clflush_flag == 1)
+            clflush_signal <= 1;
 
         if (!bus.respcyc) begin
 
@@ -184,9 +182,17 @@ always @ (posedge bus.clk) begin
                 end
             end
         end
-        if (!databus.respcyc) begin
-            if (store_ins && store_done) begin
 
+        if (!databus.respcyc) begin
+            if (clflush_flag) begin
+                if (!outstanding_fetch_req) begin
+                    //$write("PARAM %x\n", clflush_param);
+                    databus.req <= (clflush_param & ~63);
+                    databus.reqtag <= { databus.WRITE, databus.MEMORY, {5'b0,1'b1,1'b1,1'b1} };
+                    databus.reqcyc <= 1;
+                    outstanding_fetch_req <= 1;
+                end
+            end else if (store_ins && store_done) begin
                 // Handling store instruction
                 if (!outstanding_fetch_req) begin
                     databus.req <= (data_reqAddr & ~63);
@@ -199,26 +205,19 @@ always @ (posedge bus.clk) begin
                     if (callqFlag)
                         callq_stage2 <= 1;
                 end
-            end
-            else begin
+
+            end else if (!outstanding_fetch_req && (data_req)) begin
                 // Sending a request for data
-                if (!outstanding_fetch_req && (data_req)) begin
-                    //$write("sending req for %x", (data_reqAddr & ~63));
-                    databus.req <= (data_reqAddr & ~63) ;
-                    //if((data_reqAddr & ~63) == 6299264)
-                      //  $finish;
-                    fetch_data_skip <= (data_reqAddr[58:63])&(~7);
-                    fetch_store_skip <= (data_reqAddr[58:63])&(~7);
-                    //$write("req = %x", databus.req);
-                    databus.reqtag <= { databus.READ, databus.MEMORY, {7'b0,1'b1}};
-                    databus.reqcyc <= 1;
-                    data_offset <= 0;
-                    data_buffer <= 0;
-                    load_buffer <= 0;
-                    store_writeback <= 0;
-                    outstanding_fetch_req <= 1;
-                    //outstanding_data_req <= 1;
-                end
+                databus.req <= (data_reqAddr & ~63) ;
+                fetch_data_skip <= (data_reqAddr[58:63])&(~7);
+                fetch_store_skip <= (data_reqAddr[58:63])&(~7);
+                databus.reqtag <= { databus.READ, databus.MEMORY, {7'b0,1'b1}};
+                databus.reqcyc <= 1;
+                data_offset <= 0;
+                data_buffer <= 0;
+                load_buffer <= 0;
+                store_writeback <= 0;
+                outstanding_fetch_req <= 1;
             end
         end
 
@@ -386,7 +385,7 @@ always @ (posedge bus.clk) begin
                     //fetch_offset <= 0;
                 end
                 jump_signal <= 1;
-                if(callq_stage2)
+                if (callq_stage2)
                     callq_stage2 <= 0;
             end
 
@@ -448,8 +447,10 @@ always @ (posedge bus.clk) begin
             end
             //if (data_offset >= 56)
             //    load_done <= 1;
-        end
-        else begin
+        end else if (databus.respcyc && (databus.resptag[7:0] == 7)) begin
+            clflush_signal <= 0;
+            outstanding_fetch_req <= 0;
+        end else begin
             load_done <= 0;
 
             if (databus.reqack) begin
@@ -550,24 +551,18 @@ EX_WB exwb;
 flags_reg rflags;
 flags_reg rflags_seq;
 
-// Request ack logic
-always_comb begin
-  if (bus.reqack && store_done)
-      store_ack_received = 1;
-end
-
 mod_decode dec (
         // INPUT PARAMS
         jump_signal, fetch_rip, fetch_offset, decode_offset, 
         decode_bytes, opcode_group, callq_stage2, load_buffer, store_writeback, 
-        outstanding_fetch_req, end_prog,
+        outstanding_fetch_req, end_prog, clflush_signal,
         // OUTPUT PARAMS
         regfile, rflags, load_done, memex, exwb, rip, 
         jump_target, store_word, store_ins, store_opn, 
         jump_flag, data_req, data_reqAddr, bytes_decoded_this_cycle,
         store_writebackFlag, callqFlag, rflags_seq, idmem, jump_cond_signal,
-        end_progFlag
-        );
+        end_progFlag, clflush_flag, clflush_param
+    );
 
 always @ (posedge bus.clk) begin
     //can_decode <= 1;

@@ -86,6 +86,7 @@ module mod_decode (
     input store_writeback,
     input outstanding_fetch_req,
     input end_prog,
+    input clflush_signal,
     
     output [0:63] regfile[0:16-1],
     output flags_reg rflags, 
@@ -106,7 +107,9 @@ module mod_decode (
     output flags_reg rflags_seq,
     output ID_MEM idmem,
     output jump_cond_signal,
-    output end_progFlag
+    output end_progFlag,
+    output clflush_flag,
+    output [0:63] clflush_param
 );
     
 
@@ -154,6 +157,8 @@ logic memstage_active;
 logic store_memstage_active;
 logic data_reqFlag;
 logic store_reqFlag;
+logic clflush_flag;
+logic [0:63] clflush_param;
 
 logic jump_cond_signal;
 logic jump_cond_flag;
@@ -597,7 +602,7 @@ wire can_decode = (fetch_offset - decode_offset >= 7'd15);
 always_comb begin
     dependency = 0;
 
-  if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 || load_done == 1 || sim_end_seq == 1)
+  if (can_writeback == 1 || jump_signal == 1 || jump_cond_signal == 1 || data_req == 1 || memstage_active == 1 || store_memstage_active == 1 || load_done == 1 || sim_end_seq == 1 || clflush_signal == 1)
         can_decode = 0;
 
     if (can_decode) begin : decode_block
@@ -621,6 +626,7 @@ always_comb begin
         store_word = 0;
         store_ins = 0;
         store_writebackFlag = 0;
+        clflush_flag = 0;
       
 
         for (i = 0; i < 32 ; i++) begin
@@ -892,6 +898,8 @@ always_comb begin
                         
                         //$finish;
                     end
+                    else if (opcode == 174) // 0F AE (CLF)
+                        opcode_enc_byte = "CLF";
                     else if (opcode == 175) // 0F AF (imul)
                         opcode_enc_byte = "RM ";
                     else                    // 0F xx (jump inst)
@@ -904,7 +912,7 @@ always_comb begin
 
                 assert(opcode_enc_byte != 0) else $fatal;
 
-                if (opcode_enc_byte[0:7] == "M" || opcode_enc_byte[0:7] == "R") begin
+                if (opcode_enc_byte[0:7] == "M" || opcode_enc_byte[0:7] == "R"|| opcode_enc_byte[0:7] == "C") begin
                     /*
                      * We have found a Mod R/M byte for MR, RM, M, MI, MIS
                      * The direction (source / destination is available in opcode_enc value")
@@ -984,6 +992,7 @@ always_comb begin
                                     rmByte_contents = rmByte;
                                     data_reqAddr = regfile[regByte] - 8;
                                     store_word = rip + 2;
+                                    reg_buffer[0:39] = {{"*"} , {reg_table_64[rmByte]}};
                                     //$write("caught for callq RSP = %x word = %x reg %x, rm %x", data_reqAddr, store_word, regByte, rmByte);
                                     // can_decode = 0;
                                     dependency = 2;
@@ -1501,6 +1510,21 @@ always_comb begin
                     end
                     end
                 end
+                else if (opcode_enc_byte == "CLF") begin
+                    /*
+                     * " CLFLUSH Instructions : Flush Cache Line "
+                     */
+                    if (score_board[rmByte] == 0) begin
+                        reg_buffer[0:100] = {{"clflush "}, {reg_table_64[rmByte]}};
+                        enable_memstage = 0;
+                        clflush_flag = 1;
+                        clflush_param = regfile[rmByte];
+                    end else begin
+                        can_decode = 0;
+                        offset = 0;
+                        enable_memstage = 0;
+                    end
+                end
             end
         end else begin
             /* Dont need to support other Prefixes. Just printing out the prefix name */
@@ -1552,12 +1576,13 @@ always_comb begin
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
         if ((instr_buffer != empty_str) && can_decode) begin
-        //    $write("  %0h:    ", rip);
-        //    print_prog_bytes(space_buffer, offset);
-        //    $write("%s%s\n", instr_buffer, reg_buffer);
-        //$display("\n");
-        //disp_reg_file();
-        //$display("\n");
+            $write("  %0h:    ", rip);
+            print_prog_bytes(space_buffer, offset);
+            $write("%s%s\n", instr_buffer, reg_buffer);
+            $display("\n");
+            disp_reg_file();
+            $display("\n");
+
             enable_memstage = 1;
             if (jump_flag == 1) begin
                 can_decode = 0;
@@ -1599,7 +1624,7 @@ mod_memstage mem (
         can_writeback, loadbuffer_done, data_reqFlag, store_reqFlag, 
         store_writebackFlag, jump_flag, jump_cond_flag, memstage_active, 
         load_done, score_board, regfile, rflags, memex, exwb
-        );
+    );
 
 
 always @ (posedge bus.clk) begin

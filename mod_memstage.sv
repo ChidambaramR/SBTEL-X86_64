@@ -222,8 +222,6 @@ always @ (posedge bus.clk) begin
             end
             can_execute <= 1;
         end
-        
-
     end
 end
 
