@@ -69,9 +69,8 @@ always @ (posedge iCacheArbiterBus.clk) begin
     if (iCacheArbiterBus.reset) begin
         request_type <= no_request;
         for (i = 0; i < totalSets; i = i+1) begin
-            set_ind <= i[logSets:1];
             for (j = 0; j < logDepthPerSet; j = j+1) begin
-                control[set_ind][j].valid <= 0;
+                control[i[logSets:1]][j].valid <= 0;
             end
         end
         cache_writeEnable <= {wordsPerBlock{1'b0}};
@@ -84,9 +83,8 @@ always @ (posedge iCacheArbiterBus.clk) begin
         match_ind <= totalSets;
         lastInvalid <= totalSets;
         for (i = 0; i < totalSets; i++) begin
-            set_ind <= i[logSets:1];
-            if (control[set_ind][addr.index].valid == 1) begin
-                if (control[set_ind][addr.index].tag == addr.tag) begin
+            if (control[i[logSets:1]][addr.index].valid == 1) begin
+                if (control[i[logSets:1]][addr.index].tag == addr.tag) begin
                     match_ind <= i;
                     break;
                 end
@@ -97,6 +95,8 @@ always @ (posedge iCacheArbiterBus.clk) begin
         end
         request_type <= new_request;
     end else if (request_type == new_request) begin
+        iCoreCacheBus.reqack <= 0;
+
         if (match_ind == totalSets) begin
             // Cache MISS
             if (lastInvalid == totalSets) begin
@@ -119,7 +119,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
         else begin
             // CACHE HIT
             set_ind <= match_ind[logSets-1:0];
-            cache_readAddr <= {set_ind, addr.index};
+            cache_readAddr <= {match_ind[logSets-1:0], addr.index};
             cache_writeEnable <= {wordsPerBlock{1'b0}};
             
             request_type <= cache_read_req;
@@ -128,8 +128,6 @@ always @ (posedge iCacheArbiterBus.clk) begin
         if (iCacheArbiterBus.reqack == 1) 
             iCacheArbiterBus.reqcyc <= 0;
 
-        iCoreCacheBus.reqack <= 0;
-
         if (iCacheArbiterBus.respcyc == 1) begin
 
             // Send back data to Core
@@ -137,6 +135,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
             iCoreCacheBus.resptag <= iCacheArbiterBus.resptag;
             iCoreCacheBus.respcyc <= 1;
 
+        $write("\n cache: %x $$ %x $$ %x $$ %x\n",  iCoreCacheBus.req, addr.tag, addr.index, addr.offset);
             // Also setup new cache block entry and write new block to cache
             control[set_ind][addr.index].tag <= addr.tag;
             control[set_ind][addr.index].valid <= 1;
@@ -144,7 +143,7 @@ always @ (posedge iCacheArbiterBus.clk) begin
             cache_writeData <= iCacheArbiterBus.resp;
             cache_writeAddr <= {set_ind, addr.index};
             cache_writeEnable <= {wordsPerBlock{1'b1}};
-
+ 
             request_type <= cache_write_req;
         end
 
@@ -162,7 +161,9 @@ always @ (posedge iCacheArbiterBus.clk) begin
         end
 
     end else if (request_type == cache_write_req) begin
+        $write("\n cache2: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
         iCoreCacheBus.respcyc <= 0;
+
         if (delay_counter >= delay) begin
             // Data already sent to iCoreCacheBus
             request_type <= no_request;

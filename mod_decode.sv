@@ -77,8 +77,8 @@ typedef struct packed {
 module mod_decode (
     input jump_signal,
     input [63:0] fetch_rip,
-    input [6:0] fetch_offset, 
-    input [6:0] decode_offset,
+    input [7:0] fetch_offset, 
+    input [7:0] decode_offset,
     input [0:15*8-1] decode_bytes,
     input [0:255][0:0][0:3] opcode_group,
     input callq_stage2,
@@ -629,7 +629,7 @@ always_comb begin
         instr_buffer = empty_str; 
 
         // Compute program address for next instruction
-        rip = fetch_rip - {57'b0, (fetch_offset - decode_offset)};
+        rip = fetch_rip - {56'b0, (fetch_offset - decode_offset)};
         //if(rip == 4201971)
         //    $finish;
         /*

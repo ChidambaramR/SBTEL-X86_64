@@ -13,7 +13,7 @@ import "DPI-C" function longint syscall_cse502(input longint rax, input longint 
 
 enum { fetch_idle, fetch_waiting, fetch_active } fetch_state;
 logic[63:0] fetch_rip;
-logic[0:2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
+logic[0:2*2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
 logic[0:64*8-1] data_buffer;
 logic[0:8*8-1] load_buffer;
 logic[0:8*8-1] store_word;
@@ -30,7 +30,7 @@ logic load_done; // This variable is true whenever the requested byte has been p
 logic[5:0] fetch_skip;
 logic[5:0] fetch_store_skip;
 logic[5:0] fetch_data_skip;
-logic[6:0] fetch_offset, decode_offset;
+logic[7:0] fetch_offset, decode_offset;
 logic[0:6] data_offset;
 logic[0:63] regfile[0:16-1];
 
@@ -134,7 +134,7 @@ always_comb begin
         send_fetch_req = 0; // hack: still idle, but already got ack (in theory, we could try to send another request as early as this)
     end else begin
     if (!jump_signal && !jump_cond_signal && !store_ins && !data_req)
-            send_fetch_req = (fetch_offset - decode_offset < 7'd32);
+            send_fetch_req = (fetch_offset - decode_offset < 7'd16);
         //if (jump_signal && !bus.respcyc) begin
         //    jump_flag = 0;
         //    send_fetch_req = 1;
@@ -261,7 +261,6 @@ always @ (posedge bus.clk) begin
             assert(!send_fetch_req) else $fatal;
             outstanding_fetch_req <= 0;
             fetch_state <= fetch_active;
-            fetch_rip <= fetch_rip + 8;
 
             if (fetch_skip == 0)
                         decode_buffer[(fetch_offset*8) +: 512-0*8 ] <= bus.resp[511 - 0*8  : 0];
@@ -393,6 +392,7 @@ always @ (posedge bus.clk) begin
                         decode_buffer[(fetch_offset*8) +: 512-63*8] <=bus.resp[511 - 63*8 : 0];
 
             fetch_offset <= (fetch_offset + 64) - fetch_skip;
+            fetch_rip <= fetch_rip + 64;
             fetch_skip <= 0;
             
         end else begin
@@ -479,7 +479,7 @@ always @ (posedge bus.clk) begin
     end
 end
 
-wire[0:(128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
+wire[0:(2*128+15)*8-1] decode_bytes_repeated = { decode_buffer, decode_buffer[0:15*8-1] }; // NOTE: buffer bits are left-to-right in increasing order
 wire[0:15*8-1] decode_bytes = decode_bytes_repeated[decode_offset*8 +: 15*8]; // NOTE: buffer bits are left-to-right in increasing order
 
 /*

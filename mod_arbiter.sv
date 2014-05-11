@@ -6,7 +6,7 @@ module mod_arbiter #(DATA_WIDTH = 512, TAG_WIDTH = 13) (
     CacheArbiterBus dCacheBus
 );
 
-enum { sysbus_idle, sysbus_iread, sysbus_dread, sysbus_dwrite } sysbus_state;
+enum { sysbus_idle, sysbus_iread, sysbus_dread, sysbus_iread_done, sysbus_dwrite } sysbus_state;
 enum { data_req, instr_req, no_req } request_type;
 
 logic send_sysbus_req;
@@ -31,7 +31,6 @@ always @ (posedge bus.clk) begin
 
             if (dCacheBus.reqcyc) begin
                 dCacheBus.reqack <= 1;
-                dCacheBus.respcyc <= 0;
 
                 bus.req    <= dCacheBus.req;
                 bus.reqtag <= dCacheBus.reqtag;
@@ -42,11 +41,9 @@ always @ (posedge bus.clk) begin
                 end else begin
                     sysbus_state <= sysbus_dwrite;
                 end
-
                 
             end else if (iCacheBus.reqcyc) begin
                 iCacheBus.reqack <= 1;
-                iCacheBus.respcyc <= 0;
 
                 bus.req    <= iCacheBus.req;
                 bus.reqtag <= iCacheBus.reqtag;
@@ -65,15 +62,18 @@ always @ (posedge bus.clk) begin
                 data_offset <= data_offset + 8;
 
                 if (data_offset >= 56) begin
-                    // 64 bytes read, ready to send them to icache
                     iCacheBus.resptag <= bus.resptag;
-                    iCacheBus.resp <= data_buffer;
-                    iCacheBus.respcyc <= 1;
-
-                    sysbus_state <= sysbus_idle;
-                    data_offset <= 0;
+                    sysbus_state <= sysbus_iread_done;
                 end
             end
+
+        end else if (sysbus_state == sysbus_iread_done) begin
+            // 64 bytes read, ready to send them to icache
+            iCacheBus.resp <= data_buffer;
+            iCacheBus.respcyc <= 1;
+
+            sysbus_state <= sysbus_idle;
+            data_offset <= 0;
 
         end else if (sysbus_state == sysbus_dread) begin
             if (bus.reqack)
@@ -116,6 +116,8 @@ always @ (posedge bus.clk) begin
             end
         end else begin
             bus.reqcyc <= 0;
+            iCacheBus.respcyc <= 0;
+            dCacheBus.respcyc <= 0;
         end
     end
 end
