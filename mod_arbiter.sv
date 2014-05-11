@@ -50,6 +50,7 @@ always @ (posedge bus.clk) begin
                     sysbus_state <= sysbus_dread;
                 end else begin
                     sysbus_state <= sysbus_dwrite;
+                    data_offset <= 56;
                 end
                 
             end else if (iCacheBus.reqcyc) begin
@@ -117,9 +118,9 @@ always @ (posedge bus.clk) begin
             if (bus.reqack) begin
                 bus.req <= byte8_swap(dCacheBus.reqdata[data_offset*8 +: 64]);
                 bus.reqcyc <= 1;
-                data_offset <= data_offset + 8; 
+                data_offset <= data_offset - 8; 
 
-                if (data_offset >= 56) begin
+                if (data_offset == 0) begin
                     // 64 bytes written, ready to send signal to dcache
                     dCacheBus.resptag <= bus.resptag;
                     dCacheBus.respcyc <= 1;

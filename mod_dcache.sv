@@ -103,7 +103,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
         if (match_ind == totalSets) begin
             // Cache MISS
             if (dCoreCacheBus.reqtag[7:0] == 7) begin
-        $write("\n dcache NO EVICT CACHE MISS: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache NO EVICT CACHE MISS: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
                 dCoreCacheBus.resptag <= dCoreCacheBus.reqtag;
                 dCoreCacheBus.respcyc <= 1;
                 request_type <= no_request;
@@ -154,15 +154,15 @@ always @ (posedge dCacheArbiterBus.clk) begin
                 cache_readAddr <= {match_ind[logSets-1:0], addr.index};
                 cache_writeEnable <= {wordsPerBlock{1'b0}};
                 request_type <= cache_read_req;
-        $write("\n dcache READ CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache READ CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
 
             end else begin
                 if (dCoreCacheBus.reqtag[7:0] == 7) begin
                     if (control[match_ind[logSets-1:0]][addr.index].dirty == 1) begin
-        $write("\n dcache DIRTY EVICT CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache DIRTY EVICT CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
                         request_type <= cache_evict_req;
                     end else begin
-        $write("\n dcache NOT DIRTY EVICT CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache NOT DIRTY EVICT CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
                         control[match_ind[logSets-1:0]][addr.index].valid <= 0;
                         dCoreCacheBus.resptag <= dCoreCacheBus.reqtag;
                         dCoreCacheBus.respcyc <= 1;
@@ -179,20 +179,20 @@ always @ (posedge dCacheArbiterBus.clk) begin
                     dCoreCacheBus.resptag <= dCoreCacheBus.reqtag;
                     dCoreCacheBus.respcyc <= 1;
                     request_type <= cache_write_req;
-        $write("\n dcache WRITE CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache WRITE CACHE HIT: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
                 end
             end
         end
 
     end else if (request_type == cache_evict_req) begin
-        $write("\n dcache CACHE DIRTY: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache CACHE DIRTY: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
         if (control[set_ind][addr.index].dirty == 1) begin
             // As the data is dirty, we need to evict write back it to memory
             writeBlockToMem <= 1;
             writeBlockAddr <= {control[set_ind][addr.index].tag, addr.index, {logWidth{1'b0}}};
             cache_readAddr <= {set_ind, addr.index};
             cache_writeEnable <= {wordsPerBlock{1'b0}};
-        $write("\n dcache CACHE DIRTY EVICTION: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache CACHE DIRTY EVICTION: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
             
             request_type <= cache_read_req;
 
@@ -229,7 +229,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
             dCoreCacheBus.resp <= dCacheArbiterBus.resp;
             dCoreCacheBus.resptag <= dCacheArbiterBus.resptag;
             dCoreCacheBus.respcyc <= 1;
-        $write("\n dcache Mem Read: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache Mem Read: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
 
             // Also setup new cache block entry and write new block to cache
             control[set_ind][addr.index].tag <= addr.tag;
@@ -250,7 +250,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
             dCacheArbiterBus.reqcyc <= 0;
 
         if (dCacheArbiterBus.respcyc == 1) begin
-        $write("\n dcache Mem Write: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
+        //$write("\n dcache Mem Write: %x $$ %x $$ %x $$ %x $$ %x\n", dCoreCacheBus.reqtag, dCoreCacheBus.req, addr.tag, addr.index, addr.offset);
         
             if (dCoreCacheBus.reqtag[TAGWIDTH-1] == dCoreCacheBus.READ) begin
                 dCacheArbiterBus.req <= dCoreCacheBus.req;
@@ -287,7 +287,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
 
         if (delay_counter >= delay) begin
 
-    $write("\n dcache Cache Read: %x $$ %x \n", cache_readData, cache_writeEnable);
+    //$write("\n dcache Cache Read: %x $$ %x \n", cache_readData, cache_writeEnable);
             if (writeBlockToMem) begin
                 // Write the dirty cache block to the memory
                 dCacheArbiterBus.req <= writeBlockAddr & ~63;
@@ -314,7 +314,7 @@ always @ (posedge dCacheArbiterBus.clk) begin
         dCoreCacheBus.respcyc <= 0;
 
         if (delay_counter >= delay) begin
-    $write("\n dcache Cache Write: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
+    //$write("\n dcache Cache Write: %x $$ %x $$ %x\n\n", cache_writeAddr, cache_writeData, cache_writeEnable);
             // Data already sent to dCoreCacheBus
             request_type <= no_request;
             delay_counter <= 0;
