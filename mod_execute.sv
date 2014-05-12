@@ -227,8 +227,7 @@ always_comb begin
 
         else if ((memex.ctl_opcode == 133 && memex.twob_opcode == 0)) begin
             // TEST instruction
-            //$write("regA = %x, regB = %x",memex.data_regA, memex.data_regB);
-            if( memex.data_regA & memex.data_regB )
+            if(memex.data_regA != 0 & memex.data_regB != 0)
                 rflags.zf = 0; // Not equal
             else
                 rflags.zf = 1; // Equal

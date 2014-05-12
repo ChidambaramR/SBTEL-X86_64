@@ -1,6 +1,8 @@
 /* Arbiter Module to communicate between DCache/ICache and Memory */
 
 module mod_arbiter #(DATA_WIDTH = 512, TAG_WIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     Sysbus bus,
     CacheArbiterBus iCacheBus,
     CacheArbiterBus dCacheBus

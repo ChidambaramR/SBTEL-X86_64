@@ -1,4 +1,6 @@
 module mod_dcache #(WORDSIZE = 64, LOGWIDTH = 6, LOGDEPTH = 9, LOGSETS = 2, TAGWIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     DCoreCacheBus   dCoreCacheBus,
     CacheArbiterBus dCacheArbiterBus
 );
@@ -17,7 +19,7 @@ parameter logWidth  = LOGWIDTH,
           i_index   = i_offset - logWidth,
           i_tag     = i_index  - logDepthPerSet, 
           ports = 1,
-          delay = 1;//(logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
+          delay = (logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10;
 
 typedef struct packed {
     logic [i_tag    : 0        ] tag;           //    Tag bit positions = 50:0
@@ -34,7 +36,6 @@ typedef struct packed {
 cntr_struct control [totalSets-1:0][(1<<logDepthPerSet)-1:0];
 
 addr_struct addr;
-logic[bitWidth-1:0] writeData;
 logic[logSets-1:0] set_ind;
 logic[logSets:0] match_ind;
 logic[logSets:0] lastInvalid;

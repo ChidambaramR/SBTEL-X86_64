@@ -1,4 +1,6 @@
 module mod_icache #(WORDSIZE = 64, LOGWIDTH = 6, LOGDEPTH = 9, LOGSETS = 2, TAGWIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     ICoreCacheBus    iCoreCacheBus,
     CacheArbiterBus iCacheArbiterBus
 );
@@ -17,7 +19,7 @@ parameter logWidth  = LOGWIDTH,
           i_index   = i_offset - logWidth,
           i_tag     = i_index  - logDepthPerSet, 
           ports = 1,
-          delay = 1;//(logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
+          delay = (logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
 
 typedef struct packed {
     logic [i_tag    : 0        ] tag;           //    Tag bit positions = 50:0
@@ -27,14 +29,12 @@ typedef struct packed {
 
 typedef struct packed {
     logic valid;
-    //logic dirty;
     logic [i_tag:0] tag;
 } cntr_struct;
 
 cntr_struct control [totalSets-1:0][(1<<logDepthPerSet)-1:0];
 
 addr_struct addr;
-logic[bitWidth-1:0] writeData;
 logic[logSets-1:0] set_ind;
 logic[logSets:0] match_ind;
 logic[logSets:0] lastInvalid;
@@ -103,7 +103,8 @@ always @ (posedge iCacheArbiterBus.clk) begin
                 // Allocate a new Cache Block entry
                 // No free cache block available. So need to replace with existing block.
                 // TODO: Can use least recently used algorithm to find the entry to be evicted
-                // For now we evict the first valid entry
+                // For now we always evict the first valid entry
+                $write("EVICTION");
                 set_ind <= 0;
             end
             else begin

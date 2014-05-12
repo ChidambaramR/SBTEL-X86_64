@@ -1,6 +1,6 @@
-
-module mod_memstage(
-    
+/* verilator lint_off UNUSED */
+/* verilator lint_off UNDRIVEN */
+module mod_memstage (
     input can_memstage, 
     input[0:8*8-1] load_buffer,
     input ID_MEM idmem,
@@ -25,7 +25,7 @@ module mod_memstage(
     output flags_reg rflags,
     output MEM_EX memex,
     output EX_WB exwb
-    );    
+);
 
 /*
 * Refer to wiki page of RFLAGS for the bit pattern

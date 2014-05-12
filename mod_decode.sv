@@ -10,7 +10,6 @@ typedef struct packed {
     logic sf; // sign flag
     logic zf; // zero flag
     logic jge;
-    //logic jne;
     logic jg;
     logic res_3; // reserved bit. Should be set to 0
     logic af; // adjust flag
@@ -74,6 +73,8 @@ typedef struct packed {
     logic [0:1] mod;
 } EX_WB;
 
+/* verilator lint_off UNUSED */
+/* verilator lint_off UNDRIVEN */
 module mod_decode (
     input jump_signal,
     input [63:0] fetch_rip,
@@ -84,7 +85,6 @@ module mod_decode (
     input callq_stage2,
     input [0:8*8-1] load_buffer,
     input store_writeback,
-    input outstanding_fetch_req,
     input end_prog,
     input clflush_signal,
     
@@ -597,7 +597,7 @@ endfunction
  * This is the Decoder block. Any comments about Decode stage add here.
  */
 
-wire can_decode = (fetch_offset - decode_offset >= 7'd15);
+wire can_decode = (fetch_offset - decode_offset >= 8'd15);
 
 always_comb begin
     dependency = 0;
@@ -726,8 +726,7 @@ always_comb begin
                 reg_buffer[0:31] = reg_table_64[opcode];
                 
                 regByte = 4;
-                rmByte = opcode;
-                //$write("copde = %x rmByte = %x",opcode, rmByte);
+                rmByte = opcode[4:7];
                 regByte_contents = regByte;
                 rmByte_contents = rmByte;
 
@@ -1215,7 +1214,7 @@ always_comb begin
                             reg_buffer[0:183] = {{"$0x"}, {byte4_to_str(byte_swap(disp_byte))}, {"("}, {"%rip"}, {"), "},
                                         {reg_table_64[regByte]}};
                             if ((score_board[regByte] == 0)) begin
-                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip + offset;
+                                data_reqAddr = {{32{1'b0}}, byte_swap(disp_byte)} + rip + {60'b0, offset};
                                 if(opcode == 141) begin
                                   data_reqFlag = 0;
                                   regB_contents = data_reqAddr;
@@ -1515,7 +1514,7 @@ always_comb begin
                      * " CLFLUSH Instructions : Flush Cache Line "
                      */
                     if (score_board[rmByte] == 0) begin
-                        reg_buffer[0:100] = {{"clflush "}, {reg_table_64[rmByte]}};
+                        reg_buffer[0:95] = {{"clflush "}, {reg_table_64[rmByte]}};
                         enable_memstage = 0;
                         clflush_flag = 1;
                         clflush_param = regfile[rmByte];
@@ -1576,12 +1575,16 @@ always_comb begin
         // Print Instruction Encoding for non empty opcode_char[] entries
         // Also enable execution phase only if decoder can correctly decode the bytes
         if ((instr_buffer != empty_str) && can_decode) begin
-        //    $write("  %0h:    ", rip);
-        //    print_prog_bytes(space_buffer, offset);
-        //    $write("%s%s\n", instr_buffer, reg_buffer);
-        //    $display("\n");
-        //    disp_reg_file();
-        //    $display("\n");
+
+            // Enable below code to print the decoded instructions 
+            //$write("  %0h:    ", rip);
+            //print_prog_bytes(space_buffer, offset);
+            //$write("%s%s\n", instr_buffer, reg_buffer);
+            
+            // Enable below code to print the regfile after each instruction
+            //$display("\n");
+            //disp_reg_file();
+            //$display("\n");
 
             enable_memstage = 1;
             if (jump_flag == 1) begin
