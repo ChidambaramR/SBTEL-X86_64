@@ -1,3 +1,5 @@
+/* Core Module containing the Fetch-Stage */
+
 module Core (
     input[63:0] entry,
     /* verilator lint_off UNDRIVEN */
@@ -11,20 +13,18 @@ import "DPI-C" function longint syscall_cse502(input longint rax, input longint 
 
 enum { fetch_idle, fetch_waiting, fetch_active } fetch_state;
 logic[63:0] fetch_rip;
-logic[0:2*2*64*8-1] decode_buffer; // NOTE: buffer bits are left-to-right in increasing order
+logic[0:2*2*64*8-1] decode_buffer;
 logic[0:64*8-1] data_buffer;
 logic[0:8*8-1] load_buffer;
 logic[0:8*8-1] store_word;
 logic store_ins;
 logic store_writeback;
 logic store_writebackFlag;
-logic store_done;
 logic store_opn;
 logic clflush_signal;
 
-logic load_done; // This variable is true whenever the requested byte has been put into the local buffer
+logic load_done;
 logic[5:0] fetch_skip;
-logic[5:0] fetch_store_skip;
 logic[5:0] fetch_data_skip;
 logic[7:0] fetch_offset, decode_offset;
 logic[0:63] regfile[0:16-1];
@@ -43,7 +43,6 @@ logic [0:63] data_reqAddr;
 logic [0:63] clflush_param;
 
 initial begin
-    // Initial value of RSP from mailing list
 
     for (i = 0; i < 256; i++)
     begin
@@ -54,8 +53,7 @@ initial begin
         regfile[j[1:4]] = {64{1'b0}};
     end
 
-    regfile[4] = 31744;  // WARNING. Change it to 0x7C00 after Varun's fix
-    //regfile[6] = 1;
+    regfile[4] = 31744;  // Initialize RSP to 0x7C00
     callqFlag = 0;
 
     /*
@@ -128,7 +126,7 @@ always @ (posedge bus.clk) begin
         if (store_writebackFlag)
             store_writeback <= 1;
         
-        if (clflush_flag == 1)
+        if (clflush_ins == 1)
             clflush_signal <= 1;
 
         if (!bus.respcyc) begin
@@ -159,43 +157,37 @@ always @ (posedge bus.clk) begin
 
         if (!databus.respcyc) begin
             if (!outstanding_req) begin
-                if (clflush_flag) begin
+                if (clflush_ins) begin
                     databus.req <= (clflush_param & ~63);
                     databus.reqtag <= { databus.WRITE, databus.MEMORY, {5'b0,1'b1,1'b1,1'b1} };
                     databus.reqcyc <= 1;
                     outstanding_req <= 1;
 
-                end else if (store_ins && store_done) begin
+                end else if (store_ins && store_opn) begin
                     // Handling store instruction
                     databus.req <= (data_reqAddr & ~63);
                     databus.reqcyc <= 1;
                     databus.reqtag <= { databus.WRITE, databus.MEMORY, {6'b0,1'b1,1'b1}};
-                    store_writeback <= 0;
-                    databus.reqdata <= data_buffer[0 : 64*8-1];
-                    store_opn <= 0;
-                    store_done <= 0;
-                    if (callqFlag)
-                        callq_stage2 <= 1;
+                    databus.reqdata <= store_word;
+                    databus.reqword <= (data_reqAddr[58:63])&(~7);
+                    outstanding_req <= 1;
 
                 end else if (data_req) begin
                     // Sending a request for data
                     databus.req <= (data_reqAddr & ~63) ;
                     fetch_data_skip <= (data_reqAddr[58:63])&(~7);
-                    fetch_store_skip <= (data_reqAddr[58:63])&(~7);
                     databus.reqtag <= { databus.READ, databus.MEMORY, {7'b0,1'b1}};
                     databus.reqcyc <= 1;
                     data_buffer <= 0;
                     load_buffer <= 0;
-                    store_writeback <= 0;
+                    load_done <= 0;
                     outstanding_req <= 1;
                 end
             end
         end
 
         if (bus.respcyc && (bus.resptag[7:0] == 0)) begin
-            /*
-             * It takes around 48 micro seconds for a response to come back.
-             */
+             // It takes around 48 micro seconds for a response to come back.
             if (jump_signal && jump_sent) begin
                 jump_signal <= 0;
                 /* verilator lint_off BLKSEQ */
@@ -343,9 +335,7 @@ always @ (posedge bus.clk) begin
         end else begin
             // Handling the jump signal when no response in the bus
             if (jump_flag) begin
-                /*
-                 * A jump is found and we need to resteer the fetch
-                 */
+                 // A jump is found and we need to resteer the fetch
                 if (!outstanding_req) begin
                     fetch_rip <= (jump_target & ~63);
                     decode_buffer <= 0;
@@ -375,39 +365,30 @@ always @ (posedge bus.clk) begin
         end
         
         if (databus.respcyc && (databus.resptag[7:0] == 1)) begin
-            /*
-             * We received a response for data request
-             */
-            outstanding_req <= 0;
-            if(!load_done)
+            // We received a response for data read request
+            if (!load_done) begin
                 data_req <= 0;
-            fetch_state <= fetch_active;
-            if (!store_ins) begin
-                if(!load_done) begin
-                    load_buffer[0 : 63] <= databus.resp[(64-fetch_data_skip)*8-1 -: 64];
-                    load_done <= 1;
-                    if (callqFlag)
-                        callq_stage2 <= 1;
-                end
+                load_buffer[0 : 63] <= databus.resp[(64-fetch_data_skip)*8-1 -: 64];
+                load_done <= 1;
+                if (callqFlag)
+                    callq_stage2 <= 1;
             end
-            else begin
-                // This is the flag which controls whether STORE operation has completed or not. If 0, not complete
-                // We are begining the STORE operation.
-                // We are here for a STORE instruction
-                data_buffer[0 : 64*8-1] <= databus.resp;
-                data_buffer[fetch_store_skip*8 +: 64] <= store_word;
-                /*
-                 * We have finished getting the contents in the data buffer. Now put the change buffer
-                 * in the corresponding place.
-                 */
-                store_done <= 1;
-            end
+            outstanding_req <= 0;
+        end else if (databus.respcyc && (databus.resptag[7:0] == 3)) begin
+            // We received a response for data store request
+            store_writeback <= 0;
+            store_opn <= 0;
+            if (callqFlag)
+                callq_stage2 <= 1;
+
+            outstanding_req <= 0;
         end else if (databus.respcyc && (databus.resptag[7:0] == 7)) begin
+            // We received a response for cache line flush request
             clflush_signal <= 0;
             outstanding_req <= 0;
+
         end else begin
             load_done <= 0;
-
             if (databus.reqack) begin
                 databus.reqcyc <= 0;
             end
@@ -490,9 +471,7 @@ typedef struct packed {
 } EX_WB;
 
 
-
 logic [0:63] rip;
-
 logic[0 : 3] bytes_decoded_this_cycle;    
 logic jump_flag;
 logic jump_signal;
@@ -506,7 +485,7 @@ EX_WB exwb;
 flags_reg rflags;
 flags_reg rflags_seq;
 
-mod_decode dec (
+mod_decode decode (
         // INPUT PARAMS
         jump_signal, fetch_rip, fetch_offset, decode_offset, 
         decode_bytes, opcode_group, callq_stage2, load_buffer, store_writeback, 
@@ -516,7 +495,7 @@ mod_decode dec (
         jump_target, store_word, store_ins, store_opn, 
         jump_flag, data_req, data_reqAddr, bytes_decoded_this_cycle,
         store_writebackFlag, callqFlag, rflags_seq, idmem, jump_cond_signal,
-        end_progFlag, clflush_flag, clflush_param
+        end_progFlag, clflush_ins, clflush_param
     );
 
 always @ (posedge bus.clk) begin

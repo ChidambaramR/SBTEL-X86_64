@@ -1,11 +1,13 @@
+/* SRAM Memory Module */
+
 module SRAM #(WORDSIZE = 64, WIDTH = 512, LOGDEPTH = 9) (
-        input clk,
-        input [LOGDEPTH-1:0] readAddr,
-        output[ WIDTH-1:0] readData,
-        input [LOGDEPTH-1:0] writeAddr,
-        input [ WIDTH-1:0] writeData,
-        input [WIDTH/WORDSIZE-1:0] writeEnable
-    );
+    input clk,
+    input [LOGDEPTH-1:0] readAddr,
+    output[ WIDTH-1:0] readData,
+    input [LOGDEPTH-1:0] writeAddr,
+    input [ WIDTH-1:0] writeData,
+    input [WIDTH/WORDSIZE-1:0] writeEnable
+);
 parameter ports = 1,
           delay = (LOGDEPTH-8>0?LOGDEPTH-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
 

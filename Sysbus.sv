@@ -1,8 +1,10 @@
-/* verilator lint_off UNDRIVEN */
-/* verilator lint_off UNUSED */
+/* Bus Interface to communicate between Arbiter and DRAM-Memory */
+
 interface Sysbus #(DATA_WIDTH = 64, TAG_WIDTH = 1) (
-	input reset
-,	input clk
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
+    input reset,
+    input clk
 );
 
 

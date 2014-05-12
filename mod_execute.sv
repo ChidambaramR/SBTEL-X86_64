@@ -1,11 +1,4 @@
-/*
- * This is the ALU block. Any comments about ALU add here.
- * Info about RFLAGS for each instruction
- * ADD:
- *     It sets the OF and the CF flags to indiciate a carry(overflow) in the signed or unsigned result. 
- *     The SF indicates the sign of the signed result
- */
-
+/* Execute-Stage Module */
 
 import "DPI-C" function longint syscall_cse502(input longint rax, input longint rdi, input longint rsi, input longint rdx, input longint r10, input longint r8, input longint r9);
 
@@ -422,7 +415,7 @@ always_comb begin
         enable_writeback = 0;
 end
 
-mod_writeback rb (
+mod_writeback writeback (
         // INPUT PARAMS
         can_writeback, exwb, store_memstage_active, end_prog,
         // OUTPUT PARAMS

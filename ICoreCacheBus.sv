@@ -1,12 +1,13 @@
-/* verilator lint_off UNDRIVEN */
-/* verilator lint_off UNUSED */
-interface ICoreCacheBus #(DATA_WIDTH = 512, ADDRESS = 64, TAG_WIDTH = 13) (
+/* Bus Interface between Core and Icache */
+
+interface ICoreCacheBus #(DATA_WIDTH = 512, WORDSIZE = 64, TAG_WIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     input reset,
     input clk
 );
 
-wire[ADDRESS-1:0] req;
-wire[DATA_WIDTH-1:0] reqdata;
+wire[WORDSIZE-1:0] req;
 wire[TAG_WIDTH-1:0] reqtag;
 wire[DATA_WIDTH-1:0] resp;
 wire[TAG_WIDTH-1:0] resptag;
@@ -27,7 +28,6 @@ modport CachePorts (
     input reset,
     input clk,
     input req,
-    input reqdata,
     input reqtag,
     output resp,
     output resptag,
@@ -41,7 +41,6 @@ modport CorePorts (
     input reset,
     input clk,
     output req,
-    output reqdata,
     output reqtag,
     input resp,
     input resptag,

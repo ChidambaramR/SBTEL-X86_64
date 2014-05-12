@@ -1,3 +1,4 @@
+/* Writeback-Stage Module */
 
 module mod_writeback (
     input can_writeback,

@@ -1,6 +1,5 @@
-/*
-* Refer to wiki page of RFLAGS for the bit pattern
-*/ 
+/* Decode-Stage Module */
+
 typedef struct packed {
     logic [12:63] unused;
     logic of; // Overflow flag
@@ -108,7 +107,7 @@ module mod_decode (
     output ID_MEM idmem,
     output jump_cond_signal,
     output end_progFlag,
-    output clflush_flag,
+    output clflush_ins,
     output [0:63] clflush_param
 );
     
@@ -157,7 +156,7 @@ logic memstage_active;
 logic store_memstage_active;
 logic data_reqFlag;
 logic store_reqFlag;
-logic clflush_flag;
+logic clflush_ins;
 logic [0:63] clflush_param;
 
 logic jump_cond_signal;
@@ -626,7 +625,7 @@ always_comb begin
         store_word = 0;
         store_ins = 0;
         store_writebackFlag = 0;
-        clflush_flag = 0;
+        clflush_ins = 0;
       
 
         for (i = 0; i < 32 ; i++) begin
@@ -1516,7 +1515,7 @@ always_comb begin
                     if (score_board[rmByte] == 0) begin
                         reg_buffer[0:95] = {{"clflush "}, {reg_table_64[rmByte]}};
                         enable_memstage = 0;
-                        clflush_flag = 1;
+                        clflush_ins = 1;
                         clflush_param = regfile[rmByte];
                     end else begin
                         can_decode = 0;
@@ -1613,13 +1612,13 @@ always_comb begin
 
     end else begin
         enable_memstage = 0;
-        if(store_writebackFlag)
+        if (store_writebackFlag)
             store_ins = 0;
         bytes_decoded_this_cycle = 0;
     end
 end
     
-mod_memstage mem (
+mod_memstage memstage (
         // INPUT PARAMS
         can_memstage, load_buffer, idmem, store_memstage_active, 
         store_ins, store_opn, opcode_group, rflags_seq, end_prog,
@@ -1690,7 +1689,7 @@ always @ (posedge bus.clk) begin
             end
             if (store_reqFlag) begin
                 store_opn <= 1;
-                data_req <= 1;
+                //data_req <= 1;
                 store_memstage_active <= 1;
             end
         end

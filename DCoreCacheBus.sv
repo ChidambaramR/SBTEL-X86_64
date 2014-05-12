@@ -1,13 +1,15 @@
-/* verilator lint_off UNDRIVEN */
-/* verilator lint_off UNUSED */
+/* Bus Interface between Core and Dcache */
+
 interface DCoreCacheBus #(DATA_WIDTH = 512, WORDSIZE = 64, TAG_WIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     input reset,
     input clk
 );
 
 wire[WORDSIZE-1:0] req;
-wire[DATA_WIDTH-1:0] reqdata;
-wire[(DATA_WIDTH/WORDSIZE)-1:0] reqwrite;
+wire[WORDSIZE-1:0] reqdata;
+wire[5:0] reqword;
 wire[TAG_WIDTH-1:0] reqtag;
 wire[DATA_WIDTH-1:0] resp;
 wire[TAG_WIDTH-1:0] resptag;
@@ -29,7 +31,7 @@ modport CachePorts (
     input clk,
     input req,
     input reqdata,
-    input reqwrite,
+    input reqword,
     input reqtag,
     output resp,
     output resptag,
@@ -44,7 +46,7 @@ modport CorePorts (
     input clk,
     output req,
     output reqdata,
-    output reqwrite,
+    output reqword,
     output reqtag,
     input resp,
     input resptag,

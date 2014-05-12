@@ -1,6 +1,8 @@
-/* verilator lint_off UNDRIVEN */
-/* verilator lint_off UNUSED */
+/* Bus Interface between ICache/Dcache and Arbiter */
+
 interface CacheArbiterBus #(DATA_WIDTH = 512, ADDRESS = 64, TAG_WIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     input reset,
     input clk
 );
