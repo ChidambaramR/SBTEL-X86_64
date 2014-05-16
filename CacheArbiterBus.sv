@@ -1,11 +1,14 @@
-/* verilator lint_off UNDRIVEN */
-/* verilator lint_off UNUSED */
-interface ArbiterCacheInterface #(DATA_WIDTH = 64, TAG_WIDTH = 13) (
+/* Bus Interface between ICache/Dcache and Arbiter */
+
+interface CacheArbiterBus #(DATA_WIDTH = 512, ADDRESS = 64, TAG_WIDTH = 13) (
+    /* verilator lint_off UNDRIVEN */
+    /* verilator lint_off UNUSED */
     input reset,
     input clk
 );
 
-wire[DATA_WIDTH-1:0] req;
+wire[ADDRESS-1:0] req;
+wire[DATA_WIDTH-1:0] reqdata; // Used for Storing into Memory
 wire[TAG_WIDTH-1:0] reqtag;
 wire[DATA_WIDTH-1:0] resp;
 wire[TAG_WIDTH-1:0] resptag;
@@ -20,14 +23,13 @@ parameter
     MEMORY  /* verilator public */ = 4'b0001,
     MMIO    /* verilator public */ = 4'b0011,
     PORT    /* verilator public */ = 4'b0100,
-    IRQ	    /* verilator public */ = 4'b1110,
-    INST    /* verilator public */ = 1'b1;
-    DATA    /* verilator public */ = 1'b0,
+    IRQ	    /* verilator public */ = 4'b1110;
 
 modport ArbiterPorts (
     input reset,
     input clk,
     input req,
+    input reqdata,
     input reqtag,
     output resp,
     output resptag,
@@ -41,6 +43,7 @@ modport CachePorts (
     input reset,
     input clk,
     output req,
+    output reqdata,
     output reqtag,
     input resp,
     input resptag,

@@ -1,6 +1,8 @@
+/* Memory-Stage Module */
 
-module mod_memstage(
-    
+module mod_memstage (
+    /* verilator lint_off UNUSED */
+    /* verilator lint_off UNDRIVEN */
     input can_memstage, 
     input[0:8*8-1] load_buffer,
     input ID_MEM idmem,
@@ -25,7 +27,7 @@ module mod_memstage(
     output flags_reg rflags,
     output MEM_EX memex,
     output EX_WB exwb
-    );    
+);
 
 /*
 * Refer to wiki page of RFLAGS for the bit pattern
@@ -183,7 +185,7 @@ always_comb begin
         enable_execute = 0;
 end
 
-mod_execute ex (
+mod_execute execute (
         // INPUT PARAMS
         enable_execute, loadbuffer_done, load_buffer, 
         store_memstage_active, opcode_group, rflags_seq, end_prog,
@@ -222,8 +224,6 @@ always @ (posedge bus.clk) begin
             end
             can_execute <= 1;
         end
-        
-
     end
 end
 

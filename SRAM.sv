@@ -1,23 +1,22 @@
-module SRAM (
-        input clk,
-        input [logDepth-1:0] readAddr,
-        output [ width-1:0] readData,
-        input [logDepth-1:0] writeAddr,
-        input [ width-1:0] writeData,
-        input [width/wordsize-1:0] writeEnable
-    );
-parameter width = 512,
-          logDepth = 7,
-          wordsize = 64,
-          ports = 1,
-          delay = (logDepth-8>0?logDepth-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
+/* SRAM Memory Module */
 
-logic[width-1:0] mem [(1<<logDepth)-1:0];
+module SRAM #(WORDSIZE = 64, WIDTH = 512, LOGDEPTH = 9) (
+    input clk,
+    input [LOGDEPTH-1:0] readAddr,
+    output[ WIDTH-1:0] readData,
+    input [LOGDEPTH-1:0] writeAddr,
+    input [ WIDTH-1:0] writeData,
+    input [WIDTH/WORDSIZE-1:0] writeEnable
+);
+parameter ports = 1,
+          delay = (LOGDEPTH-8>0?LOGDEPTH-8:1)*(ports>1?(ports>2?(ports>3?100:20):14):10)/10-1;
 
-logic[width-1:0] readpipe[delay-1];
+logic[WIDTH-1:0] mem [(1<<LOGDEPTH)-1:0];
+
+logic[WIDTH-1:0] readpipe[delay-1];
 
 initial begin
-    $display("Initializing %0dKB (%0dx%0d) memory, delay = %0d", (width+7)/8*(1<<logDepth)/1024, width, (1<<logDepth), delay);
+    $display("Initializing %0dKB (%0dx%0d) memory, delay = %0d", (WIDTH+7)/8*(1<<LOGDEPTH)/1024, WIDTH, (1<<LOGDEPTH), delay);
     assert(ports == 1) else $fatal("multi-ported SRAM not supported");
 end
 
@@ -35,9 +34,9 @@ always @ (posedge clk) begin
         readData <= mem[readAddr];
     end
 
-    for ( i=0; i<width/wordsize; i=i+1 ) begin
+    for ( i=0; i<WIDTH/WORDSIZE; i=i+1 ) begin
         if (writeEnable[i]) begin
-            mem[writeAddr][i*wordsize+:wordsize] <= writeData[i*wordsize+:wordsize];
+            mem[writeAddr][i*WORDSIZE+:WORDSIZE] <= writeData[i*WORDSIZE+:WORDSIZE];
         end
     end
 end

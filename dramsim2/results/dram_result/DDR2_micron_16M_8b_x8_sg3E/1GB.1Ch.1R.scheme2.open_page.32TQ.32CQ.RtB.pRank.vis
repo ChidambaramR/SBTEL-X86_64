@@ -62,3 +62,4 @@ IDD7=280
 Vdd=1.8
 !!EPOCH_DATA
 ms,Background_Power[0][0],ACT_PRE_Power[0][0],Burst_Power[0][0],Refresh_Power[0][0],Bandwidth[0][0][0],Average_Latency[0][0][0],Bandwidth[0][0][1],Average_Latency[0][0][1],Bandwidth[0][0][2],Average_Latency[0][0][2],Bandwidth[0][0][3],Average_Latency[0][0][3],Bandwidth[0][0][4],Average_Latency[0][0][4],Bandwidth[0][0][5],Average_Latency[0][0][5],Bandwidth[0][0][6],Average_Latency[0][0][6],Bandwidth[0][0][7],Average_Latency[0][0][7],Rank_Aggregate_Bandwidth[0][0],Rank_Average_Bandwidth[0][0],Aggregate_Bandwidth[0],Average_Bandwidth[0],
+0.3,0.642971,0.387504,0.103334,0.0376474,0.0213583,38.4366,0,nan,0.105004,37.3877,0,nan,0.19292,40.1294,0,nan,0.126263,43.4563,0,nan,0.445545,0.445545,0.445545,0.0556931,
